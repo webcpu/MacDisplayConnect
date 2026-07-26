@@ -249,6 +249,43 @@ struct VisionConnectionModelTests {
         #expect(model.phase == .statusUnavailable)
     }
 
+    @Test("returns to ready when an unavailable Mac reappears")
+    func recoversWhenSelectedMacReappears() async {
+        let mac = makeMac(name: "Desk Mac")
+        let (events, continuation) =
+            AsyncStream<RemoteDiscoveryEvent>.makeStream()
+        let model = VisionConnectionModel(
+            discover: { events },
+            connect: { _, _ in
+                .succeeded(message: "Mac Virtual Display is connected.")
+            }
+        )
+        let discovery = Task { @MainActor in
+            await model.startDiscovery()
+        }
+
+        continuation.yield(.results([mac]))
+        for _ in 0..<20 where model.macs.isEmpty {
+            await Task.yield()
+        }
+        await model.connect(to: mac)
+
+        continuation.yield(.results([]))
+        for _ in 0..<20 where !model.macs.isEmpty {
+            await Task.yield()
+        }
+        #expect(model.phase == .statusUnavailable)
+
+        continuation.yield(.results([mac]))
+        for _ in 0..<20 where model.macs.isEmpty {
+            await Task.yield()
+        }
+        continuation.finish()
+        await discovery.value
+
+        #expect(model.phase == .ready)
+    }
+
     @Test("shows connected when a discovered Mac reports connected")
     func showsLiveConnectedStatus() async {
         let mac = makeMac(name: "Studio Mac")

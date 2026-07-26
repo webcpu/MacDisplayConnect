@@ -24,19 +24,20 @@ Make sure that:
 - The devices are within 10 meters (30 feet) of each other, and neither device
   is sharing its internet connection.
 - Apple Vision Pro is unlocked, being worn, and isn’t using Guest User.
-- Xcode 26 or later is installed if you’re building the Apple Vision Pro app.
+- Xcode 26 or later is installed and selected as the active developer
+  directory.
 
-The included Xcode project currently targets visionOS 26.
+The Mac app targets macOS 26. The included Xcode project targets visionOS 26.
 
 To share the pointer between macOS and visionOS apps, turn on Handoff on both
 devices. See [Apple’s Mac Virtual Display requirements][apple-requirements] for
 more information.
 
-## Install Mac Display Connect on your Mac
+## Build and run Mac Display Connect on your Mac
 
 1. Open Terminal.
-2. Go to the project folder.
-3. Build the Mac app:
+2. Go to the root of the project folder.
+3. Build and package the Mac app:
 
    ```sh
    ./scripts/build-app.sh
@@ -49,7 +50,9 @@ more information.
    ```
 
 The build script creates **Mac Display Connect.app** in `.build/products`. You
-can move it to your Applications folder.
+can move it to your Applications folder. Use the build script rather than
+`swift run`: the script creates and signs the app bundle with the metadata
+needed for Accessibility and Local Network permission prompts.
 
 ### Allow Accessibility access
 

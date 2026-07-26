@@ -219,9 +219,9 @@ enum VisionConnectionPhase: Equatable {
 
     var acceptsDiscoveryUpdates: Bool {
         switch self {
-        case .searching, .ready, .discoveryFailure:
+        case .searching, .ready, .statusUnavailable, .discoveryFailure:
             true
-        case .connecting, .success, .statusUnavailable, .failure:
+        case .connecting, .success, .failure:
             false
         }
     }
