@@ -1,0 +1,466 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 63;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A11C0A1B0000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A11C0A1B0000000000000002 /* Assets.xcassets */; };
+		3F9EB0D8F71FB48C542570DE /* MacDisplayConnectCore in Frameworks */ = {isa = PBXBuildFile; productRef = 6254D8260B2F6E1C840289D7 /* MacDisplayConnectCore */; };
+		542FE1400110B772A05960D2 /* MacDisplayConnectTransport in Frameworks */ = {isa = PBXBuildFile; productRef = 29EFFAE6ABFA62BCA968E28D /* MacDisplayConnectTransport */; };
+		6E96AF5FF6C6703BFD73AC3F /* VisionConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28180A0FD0E498A9E1599AD7 /* VisionConnectionView.swift */; };
+		901066BAD0909EEDB4404F07 /* MacDisplayConnectVisionApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7A8770718D34483BDD82402 /* MacDisplayConnectVisionApp.swift */; };
+		ED7F2D5EE86AAF2FBF57B277 /* VisionConnectionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8B5CD6D73D749E757F02E59 /* VisionConnectionModel.swift */; };
+		F2EBB31F099C94951F0869F4 /* VisionConnectionModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1427D6F84EC468699794A63D /* VisionConnectionModelTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		FA29BE4EEE56AF9DBF87E8BF /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 564091C6BA632AF8A1F0F793 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B976333EB9B7AD8B59C3DEB9;
+			remoteInfo = MacDisplayConnectVision;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		1427D6F84EC468699794A63D /* VisionConnectionModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionConnectionModelTests.swift; sourceTree = "<group>"; };
+		28180A0FD0E498A9E1599AD7 /* VisionConnectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionConnectionView.swift; sourceTree = "<group>"; };
+		A11C0A1B0000000000000002 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		72EED31C4B73870F9EFD6343 /* MacDisplayConnectVision.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MacDisplayConnectVision.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7C9E7AFB27CA58B902899742 /* MacDisplayConnect */ = {isa = PBXFileReference; lastKnownFileType = folder; name = MacDisplayConnect; path = "../.."; sourceTree = SOURCE_ROOT; };
+		BD428B73FF23BC5532B1AF42 /* MacDisplayConnectVisionTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MacDisplayConnectVisionTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		F7A8770718D34483BDD82402 /* MacDisplayConnectVisionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacDisplayConnectVisionApp.swift; sourceTree = "<group>"; };
+		F8B5CD6D73D749E757F02E59 /* VisionConnectionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionConnectionModel.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		09D5A168B4CCE1D32694464C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3F9EB0D8F71FB48C542570DE /* MacDisplayConnectCore in Frameworks */,
+				542FE1400110B772A05960D2 /* MacDisplayConnectTransport in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		4D95A0C078D4D9BB8C428537 /* MacDisplayConnectVision */ = {
+			isa = PBXGroup;
+			children = (
+				F7A8770718D34483BDD82402 /* MacDisplayConnectVisionApp.swift */,
+				F8B5CD6D73D749E757F02E59 /* VisionConnectionModel.swift */,
+				28180A0FD0E498A9E1599AD7 /* VisionConnectionView.swift */,
+				A11C0A1B0000000000000002 /* Assets.xcassets */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		DF088657339EAC3C5E5ED623 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				7C9E7AFB27CA58B902899742 /* MacDisplayConnect */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		E1DB5B2C1BC2AC51EACE447A /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				72EED31C4B73870F9EFD6343 /* MacDisplayConnectVision.app */,
+				BD428B73FF23BC5532B1AF42 /* MacDisplayConnectVisionTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		ECEC6119C01C5A2D59048243 /* MacDisplayConnectVisionTests */ = {
+			isa = PBXGroup;
+			children = (
+				1427D6F84EC468699794A63D /* VisionConnectionModelTests.swift */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		F47A019D2FFB8E86A94A0296 = {
+			isa = PBXGroup;
+			children = (
+				4D95A0C078D4D9BB8C428537 /* MacDisplayConnectVision */,
+				ECEC6119C01C5A2D59048243 /* MacDisplayConnectVisionTests */,
+				DF088657339EAC3C5E5ED623 /* Packages */,
+				E1DB5B2C1BC2AC51EACE447A /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		3DA0503C3F24EE559F3463A8 /* MacDisplayConnectVisionTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2AAE70101A498CAF1ED0B0CD /* Build configuration list for PBXNativeTarget "MacDisplayConnectVisionTests" */;
+			buildPhases = (
+				0A4F41C99AF244666B6A21A2 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				0D11B2D8249D0E71CBE944A2 /* PBXTargetDependency */,
+			);
+			name = MacDisplayConnectVisionTests;
+			packageProductDependencies = (
+			);
+			productName = MacDisplayConnectVisionTests;
+			productReference = BD428B73FF23BC5532B1AF42 /* MacDisplayConnectVisionTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		B976333EB9B7AD8B59C3DEB9 /* MacDisplayConnectVision */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5AE2759DDB344C8C4D3799AA /* Build configuration list for PBXNativeTarget "MacDisplayConnectVision" */;
+			buildPhases = (
+				6B9C74C94B81E7954652E388 /* Sources */,
+				A11C0A1B0000000000000003 /* Resources */,
+				09D5A168B4CCE1D32694464C /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MacDisplayConnectVision;
+			packageProductDependencies = (
+				6254D8260B2F6E1C840289D7 /* MacDisplayConnectCore */,
+				29EFFAE6ABFA62BCA968E28D /* MacDisplayConnectTransport */,
+			);
+			productName = MacDisplayConnectVision;
+			productReference = 72EED31C4B73870F9EFD6343 /* MacDisplayConnectVision.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		564091C6BA632AF8A1F0F793 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					B976333EB9B7AD8B59C3DEB9 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 372BA0701F33C448D4B31D24 /* Build configuration list for PBXProject "MacDisplayConnectVision" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = F47A019D2FFB8E86A94A0296;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				6B17C7F2A27B23ECE8FEDD56 /* XCLocalSwiftPackageReference "../.." */,
+			);
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				B976333EB9B7AD8B59C3DEB9 /* MacDisplayConnectVision */,
+				3DA0503C3F24EE559F3463A8 /* MacDisplayConnectVisionTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A11C0A1B0000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A11C0A1B0000000000000001 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		0A4F41C99AF244666B6A21A2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F2EBB31F099C94951F0869F4 /* VisionConnectionModelTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6B9C74C94B81E7954652E388 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				901066BAD0909EEDB4404F07 /* MacDisplayConnectVisionApp.swift in Sources */,
+				ED7F2D5EE86AAF2FBF57B277 /* VisionConnectionModel.swift in Sources */,
+				6E96AF5FF6C6703BFD73AC3F /* VisionConnectionView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		0D11B2D8249D0E71CBE944A2 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B976333EB9B7AD8B59C3DEB9 /* MacDisplayConnectVision */;
+			targetProxy = FA29BE4EEE56AF9DBF87E8BF /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		2B0098763B215040A46BCB2A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = NA5BE2D52P;
+				INFOPLIST_FILE = Sources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = local.macdisplayconnect.vision;
+				SDKROOT = xros;
+				SUPPORTED_PLATFORMS = "xros xrsimulator";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 7;
+				XROS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Release;
+		};
+		416F79AF3BC4FCC589BA6CD9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = local.macdisplayconnect.vision.tests;
+				SDKROOT = xros;
+				SUPPORTED_PLATFORMS = "xros xrsimulator";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 7;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MacDisplayConnectVision.app/MacDisplayConnectVision";
+				XROS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Release;
+		};
+		75B698B04A05660E4CBCA99E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = local.macdisplayconnect.vision.tests;
+				SDKROOT = xros;
+				SUPPORTED_PLATFORMS = "xros xrsimulator";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 7;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MacDisplayConnectVision.app/MacDisplayConnectVision";
+				XROS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Debug;
+		};
+		82D006BCF242C4030928DB63 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = xros;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		A9405B2F9FE49217FC484282 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = NA5BE2D52P;
+				INFOPLIST_FILE = Sources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = local.macdisplayconnect.vision;
+				SDKROOT = xros;
+				SUPPORTED_PLATFORMS = "xros xrsimulator";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 7;
+				XROS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Debug;
+		};
+		ADEA759AC15EEC248FFF3C41 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = xros;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		2AAE70101A498CAF1ED0B0CD /* Build configuration list for PBXNativeTarget "MacDisplayConnectVisionTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				75B698B04A05660E4CBCA99E /* Debug */,
+				416F79AF3BC4FCC589BA6CD9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		372BA0701F33C448D4B31D24 /* Build configuration list for PBXProject "MacDisplayConnectVision" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				ADEA759AC15EEC248FFF3C41 /* Debug */,
+				82D006BCF242C4030928DB63 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		5AE2759DDB344C8C4D3799AA /* Build configuration list for PBXNativeTarget "MacDisplayConnectVision" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A9405B2F9FE49217FC484282 /* Debug */,
+				2B0098763B215040A46BCB2A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		6B17C7F2A27B23ECE8FEDD56 /* XCLocalSwiftPackageReference "../.." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../..";
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		29EFFAE6ABFA62BCA968E28D /* MacDisplayConnectTransport */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MacDisplayConnectTransport;
+		};
+		6254D8260B2F6E1C840289D7 /* MacDisplayConnectCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MacDisplayConnectCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 564091C6BA632AF8A1F0F793 /* Project object */;
+}

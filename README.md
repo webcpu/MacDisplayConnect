@@ -1,0 +1,189 @@
+# Mac Display Connect
+
+Start Mac Virtual Display from Apple Vision Pro, even when your Mac screen
+isn’t in view.
+
+Mac Display Connect includes two apps:
+
+- The **Mac app** controls the existing Screen Mirroring interface.
+- The **Apple Vision Pro app** finds your Mac and asks it to connect.
+
+Both apps communicate directly over your local network. Keep the Mac app open
+while using the Apple Vision Pro app.
+
+## Before you begin
+
+Make sure that:
+
+- Your Mac is running macOS 26 or later.
+- Your Mac and Apple Vision Pro are signed in to the same Apple Account using
+  two-factor authentication.
+- iCloud Keychain is turned on for both devices.
+- Wi-Fi and Bluetooth are turned on for both devices.
+- Both devices are connected to the same local network.
+- The devices are within 10 meters (30 feet) of each other, and neither device
+  is sharing its internet connection.
+- Apple Vision Pro is unlocked, being worn, and isn’t using Guest User.
+- Xcode 26 or later is installed if you’re building the Apple Vision Pro app.
+
+The included Xcode project currently targets visionOS 26.
+
+To share the pointer between macOS and visionOS apps, turn on Handoff on both
+devices. See [Apple’s Mac Virtual Display requirements][apple-requirements] for
+more information.
+
+## Install Mac Display Connect on your Mac
+
+1. Open Terminal.
+2. Go to the project folder.
+3. Build the Mac app:
+
+   ```sh
+   ./scripts/build-app.sh
+   ```
+
+4. Open the app:
+
+   ```sh
+   open ".build/products/Mac Display Connect.app"
+   ```
+
+The build script creates **Mac Display Connect.app** in `.build/products`. You
+can move it to your Applications folder.
+
+### Allow Accessibility access
+
+Mac Display Connect needs Accessibility access to operate Screen Mirroring.
+
+1. Open **Mac Display Connect** on your Mac.
+2. Select **Connect**.
+3. When macOS asks for permission, open **System Settings**.
+4. Go to **Privacy & Security > Accessibility**.
+5. Turn on **Mac Display Connect**.
+6. Return to Mac Display Connect and leave the app open.
+
+If macOS asks for Local Network access, select **Allow**.
+
+## Install Mac Display Connect on Apple Vision Pro
+
+1. Connect Apple Vision Pro to Xcode.
+2. Open `MacDisplayConnect.xcworkspace`.
+3. Select the **MacDisplayConnectVision** scheme.
+4. Choose your Apple Vision Pro as the run destination.
+5. In **Signing & Capabilities**, select your development team if Xcode asks.
+6. Select **Run**.
+
+The app is installed as **Mac Display Connect**. The first time you open it,
+allow Local Network access so it can find your Mac.
+
+## Connect from Apple Vision Pro
+
+1. Open **Mac Display Connect** on your Mac and leave it running.
+2. Wear and unlock Apple Vision Pro.
+3. Open **Mac Display Connect** on Apple Vision Pro.
+4. Wait for your Mac to appear.
+5. Select **Connect** next to your Mac.
+
+The connecting symbol rotates while your Mac opens Screen Mirroring and starts
+Mac Virtual Display. Mac Display Connect selects the extended desktop option,
+not screen mirroring. When the connection is ready, the app shows
+**Connected**.
+
+## Connect from your Mac
+
+You can also start the same connection directly from the Mac app.
+
+1. Wear and unlock Apple Vision Pro.
+2. Open **Mac Display Connect** on your Mac.
+3. Select **Connect**.
+
+Mac Display Connect selects Mac Virtual Display as an extended desktop instead
+of mirroring the Mac’s built-in display.
+
+## If your Mac doesn’t appear
+
+- Make sure Mac Display Connect is open on your Mac.
+- Make sure both devices are on the same local network.
+- Check that Local Network access is enabled for Mac Display Connect on both
+  devices.
+- Turn Wi-Fi and Bluetooth off and on, then reopen both apps.
+
+## If Mac Display Connect can’t connect
+
+- Make sure Apple Vision Pro is being worn and is unlocked.
+- Confirm that both devices use the same Apple Account with two-factor
+  authentication.
+- Make sure iCloud Keychain is turned on for both devices.
+- Make sure Apple Vision Pro isn’t using Guest User.
+- Confirm that Screen Mirroring is available in Control Center on your Mac.
+- Check **System Settings > Privacy & Security > Accessibility** and make sure
+  Mac Display Connect is enabled.
+- Try **Connect** again after a few seconds.
+
+### View diagnostic information
+
+Open the diagnostic log in Console:
+
+```sh
+open -a Console \
+  "$HOME/Library/Logs/Mac Display Connect/Mac Display Connect.log"
+```
+
+The log is stored at
+`~/Library/Logs/Mac Display Connect/Mac Display Connect.log`.
+
+## Privacy and security
+
+Mac Display Connect communicates only on your local network. The Apple Vision
+Pro app can request two fixed actions: connect and check connection status.
+Connect requests include the device name reported by visionOS so the Mac can
+choose the matching Apple Vision Pro in Screen Mirroring.
+
+Mac Display Connect doesn’t:
+
+- Send data over the internet.
+- Install a display driver.
+- Replace Apple’s Mac Virtual Display protocol.
+- Use private display APIs.
+- Control unrelated applications.
+
+## For developers
+
+Open `MacDisplayConnect.xcworkspace` to access the Mac and Apple Vision Pro
+schemes.
+
+Run the Swift package tests:
+
+```sh
+swift test
+```
+
+Run the Apple Vision Pro app tests:
+
+```sh
+xcodebuild test -workspace MacDisplayConnect.xcworkspace \
+  -scheme MacDisplayConnectVision \
+  -destination "platform=visionOS Simulator,name=Apple Vision Pro"
+```
+
+Build the Mac app:
+
+```sh
+./scripts/build-app.sh
+```
+
+### Project layout
+
+```text
+Apps/Mac/          Mac app sources and tests
+Apps/Vision/       Apple Vision Pro app, Xcode project, and tests
+Shared/Core/       Shared protocol and pure connection-planning logic
+Shared/Transport/  Local Bonjour discovery and request transport
+scripts/           Build and packaging commands
+docs/              Design and testing documentation
+```
+
+For implementation details and testing boundaries, see the
+[project specification](docs/SPEC.md).
+
+[apple-requirements]: https://support.apple.com/guide/apple-vision-pro/use-mac-virtual-display-tan357ede966/visionos

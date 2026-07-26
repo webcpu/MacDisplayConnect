@@ -1,0 +1,254 @@
+import Foundation
+import MacDisplayConnectCore
+import Testing
+@testable import MacDisplayConnect
+
+@Suite("Mac connection model")
+@MainActor
+struct ConnectionModelTests {
+    @Test("connection phases use Mac Virtual Display terminology")
+    func connectionPhaseTerminology() {
+        #expect(ConnectionPhase.ready.title == "Ready to Connect")
+        #expect(
+            ConnectionPhase.ready.message
+                == "Wear and unlock your Apple Vision Pro."
+        )
+        #expect(ConnectionPhase.working.title == "Connecting…")
+        #expect(
+            ConnectionPhase.working.message
+                == "Starting Mac Virtual Display…"
+        )
+        #expect(
+            ConnectionPhase.success("Connected.").title == "Connected"
+        )
+    }
+
+    @Test("only actionable phases offer a button title")
+    func connectionPhaseActions() {
+        #expect(ConnectionPhase.ready.actionTitle == "Connect")
+        #expect(ConnectionPhase.working.actionTitle == nil)
+        #expect(ConnectionPhase.success("Connected.").actionTitle == nil)
+        #expect(
+            ConnectionPhase.failure("Connection failed.").actionTitle
+                == "Try Again"
+        )
+    }
+
+    @Test("refreshes to connected when Mac Virtual Display is active")
+    func refreshesToConnectedWhenDisplayIsActive() {
+        let model = ConnectionModel(connectionStatus: { true })
+
+        model.refreshConnectionStatus()
+
+        #expect(
+            model.phase
+                == .success("Mac Virtual Display is connected.")
+        )
+    }
+
+    @Test("refreshes to ready when Mac Virtual Display is not active")
+    func refreshesToReadyWhenDisplayIsNotActive() async {
+        let model = ConnectionModel(
+            connect: { _ in "Mac Virtual Display is connected." },
+            connectionStatus: { false }
+        )
+
+        _ = await model.connectAndExtend()
+        model.refreshConnectionStatus()
+
+        #expect(model.phase == .ready)
+    }
+
+    @Test("a successful operation returns success and updates the phase")
+    func successfulOperation() async {
+        let message = "Mac Virtual Display is connected."
+        let model = ConnectionModel(connect: { _ in message })
+
+        let response = await model.connectAndExtend()
+
+        #expect(response == .succeeded(message: message))
+        #expect(model.phase == .success(message))
+    }
+
+    @Test("a thrown operation returns failure and updates the phase")
+    func failedOperation() async {
+        let model = ConnectionModel(connect: { _ in
+            throw TestConnectionError()
+        })
+
+        let response = await model.connectAndExtend()
+
+        #expect(response == .failed(message: "Test connection failed."))
+        #expect(model.phase == .failure("Test connection failed."))
+    }
+
+    @Test("a remote request activates the Mac app before connecting")
+    func remoteRequestActivatesApplication() async {
+        var isApplicationActive = false
+        let message = "Mac Virtual Display is connected."
+        let model = ConnectionModel(
+            connect: { _ in
+                guard isApplicationActive else {
+                    throw TestConnectionError()
+                }
+                return message
+            },
+            activateForRemoteConnection: {
+                isApplicationActive = true
+                return true
+            }
+        )
+
+        let response = await model.handleRemoteConnect()
+
+        #expect(response == .succeeded(message: message))
+    }
+
+    @Test("a remote request forwards the requested Vision Pro name")
+    func remoteRequestForwardsVisionProName() async {
+        let model = ConnectionModel(
+            connect: { visionProName in
+                visionProName ?? "No Vision Pro name"
+            },
+            activateForRemoteConnection: { true }
+        )
+
+        let response = await model.handleRemoteRequest(
+            .connect(visionProName: "S’s Apple Vision Pro")
+        )
+
+        #expect(
+            response == .succeeded(message: "S’s Apple Vision Pro")
+        )
+    }
+
+    @Test("the Mac button keeps using automatic Vision Pro selection")
+    func localRequestUsesAutomaticSelection() async {
+        let model = ConnectionModel(
+            connect: { visionProName in
+                visionProName ?? "Automatic selection"
+            }
+        )
+
+        let response = await model.connectAndExtend()
+
+        #expect(response == .succeeded(message: "Automatic selection"))
+    }
+
+    @Test("a status request reports the current display state without connecting")
+    func statusRequestReportsCurrentDisplayState() async {
+        var didActivate = false
+        var didConnect = false
+        let model = ConnectionModel(
+            connect: { _ in
+                didConnect = true
+                return "Mac Virtual Display is connected."
+            },
+            activateForRemoteConnection: {
+                didActivate = true
+                return true
+            },
+            connectionStatus: { true }
+        )
+
+        let response = await model.handleRemoteRequest(.status)
+
+        #expect(response == .status(isConnected: true))
+        #expect(
+            model.phase
+                == .success("Mac Virtual Display is connected.")
+        )
+        #expect(!didActivate)
+        #expect(!didConnect)
+    }
+
+    @Test("a disconnected status request clears the connected phase")
+    func disconnectedStatusRequestClearsConnectedPhase() async {
+        let model = ConnectionModel(
+            connect: { _ in "Mac Virtual Display is connected." },
+            connectionStatus: { false }
+        )
+        _ = await model.connectAndExtend()
+
+        let response = await model.handleRemoteRequest(.status)
+
+        #expect(response == .status(isConnected: false))
+        #expect(model.phase == .ready)
+    }
+
+    @Test("a second request is busy while the first operation is suspended")
+    func concurrentRequestIsBusy() async {
+        let operation = SuspendedConnectOperation()
+        let model = ConnectionModel(
+            connect: { _ in
+                await operation.run()
+            },
+            connectionStatus: { false }
+        )
+
+        let firstRequest = Task { @MainActor in
+            await model.connectAndExtend()
+        }
+        await operation.waitUntilStarted()
+
+        let statusResponse = await model.handleRemoteRequest(.status)
+        let secondResponse = await model.connectAndExtend()
+        let invocationCountWhileBusy = await operation.invocationCount
+
+        #expect(statusResponse == .status(isConnected: false))
+        #expect(model.phase == .working)
+        #expect(secondResponse == .busy)
+        #expect(invocationCountWhileBusy == 1)
+
+        await operation.release()
+        let firstResponse = await firstRequest.value
+        let finalInvocationCount = await operation.invocationCount
+
+        #expect(
+            firstResponse
+                == .succeeded(message: "Mac Virtual Display is connected.")
+        )
+        #expect(finalInvocationCount == 1)
+    }
+}
+
+private struct TestConnectionError: LocalizedError {
+    var errorDescription: String? {
+        "Test connection failed."
+    }
+}
+
+private actor SuspendedConnectOperation {
+    private(set) var invocationCount = 0
+    private var releaseContinuation: CheckedContinuation<Void, Never>?
+    private var startContinuations: [CheckedContinuation<Void, Never>] = []
+
+    func run() async -> String {
+        invocationCount += 1
+
+        let continuations = startContinuations
+        startContinuations.removeAll()
+        continuations.forEach { $0.resume() }
+
+        await withCheckedContinuation { continuation in
+            releaseContinuation = continuation
+        }
+
+        return "Mac Virtual Display is connected."
+    }
+
+    func waitUntilStarted() async {
+        guard invocationCount == 0 else {
+            return
+        }
+
+        await withCheckedContinuation { continuation in
+            startContinuations.append(continuation)
+        }
+    }
+
+    func release() {
+        releaseContinuation?.resume()
+        releaseContinuation = nil
+    }
+}
