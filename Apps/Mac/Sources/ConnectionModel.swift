@@ -11,11 +11,22 @@ final class ConnectionModel {
         @MainActor (String?) async throws -> String
     typealias ActivationOperation = @MainActor () async -> Bool
     typealias ConnectionStatusOperation = @MainActor () -> Bool
+    typealias AccessibilityAccessCheck = @MainActor () -> Bool
+    typealias AccessibilityAccessRequest = @MainActor () -> Void
+    typealias LocalNetworkAccessEvents =
+        @Sendable () -> AsyncStream<LocalNetworkAccessStatus>
+    typealias LocalNetworkRetryDelay = @Sendable () async -> Void
 
     private(set) var phase = ConnectionPhase.ready
+    private(set) var accessibilityAccessGranted: Bool
+    private(set) var localNetworkAccess: LocalNetworkAccessStatus
     private let connect: ConnectOperation
     private let activateForRemoteConnection: ActivationOperation
     private let connectionStatus: ConnectionStatusOperation
+    private let hasAccessibilityAccess: AccessibilityAccessCheck
+    private let requestAccessibilityAccess: AccessibilityAccessRequest
+    private let localNetworkAccessEvents: LocalNetworkAccessEvents
+    private let waitBeforeLocalNetworkRetry: LocalNetworkRetryDelay
     @ObservationIgnored private var remoteServer: RemoteServer?
 
     init(
@@ -29,11 +40,34 @@ final class ConnectionModel {
         },
         connectionStatus: @escaping ConnectionStatusOperation = {
             MacVirtualDisplayMonitor.shared.isConnected
-        }
+        },
+        hasAccessibilityAccess:
+            @escaping AccessibilityAccessCheck = {
+                ControlCenter.hasAccessibilityAccess
+            },
+        requestAccessibilityAccess:
+            @escaping AccessibilityAccessRequest = {
+                ControlCenter.requestAccessibilityAccess()
+            },
+        localNetworkAccessEvents:
+            @escaping LocalNetworkAccessEvents = {
+                LocalNetworkAccessMonitor().events()
+            },
+        waitBeforeLocalNetworkRetry:
+            @escaping LocalNetworkRetryDelay = {
+                try? await Task.sleep(for: .seconds(1))
+            },
+        initialLocalNetworkAccess: LocalNetworkAccessStatus = .checking
     ) {
         self.connect = connect
         self.activateForRemoteConnection = activateForRemoteConnection
         self.connectionStatus = connectionStatus
+        self.hasAccessibilityAccess = hasAccessibilityAccess
+        self.requestAccessibilityAccess = requestAccessibilityAccess
+        self.localNetworkAccessEvents = localNetworkAccessEvents
+        self.waitBeforeLocalNetworkRetry = waitBeforeLocalNetworkRetry
+        accessibilityAccessGranted = hasAccessibilityAccess()
+        localNetworkAccess = initialLocalNetworkAccess
         DiagnosticLog.record(
             "Application launched on "
                 + ProcessInfo.processInfo.operatingSystemVersionString
@@ -48,12 +82,70 @@ final class ConnectionModel {
         }
     }
 
+    var viewState: MacDisplayConnectViewState {
+        allRequiredPermissionsGranted ? .connection : .permissions
+    }
+
+    var allRequiredPermissionsGranted: Bool {
+        accessibilityAccessGranted && localNetworkAccess == .granted
+    }
+
     func refreshConnectionStatus() {
         applyConnectionStatus(connectionStatus())
     }
 
+    func refreshAccessibilityPermission() {
+        let isGranted = hasAccessibilityAccess()
+        guard accessibilityAccessGranted != isGranted else {
+            return
+        }
+
+        accessibilityAccessGranted = isGranted
+        DiagnosticLog.record(
+            "Accessibility access changed: \(isGranted)"
+        )
+    }
+
+    func requestAccessibilityPermission() {
+        requestAccessibilityAccess()
+        refreshAccessibilityPermission()
+    }
+
+    func monitorPermissions() async {
+        refreshAccessibilityPermission()
+
+        while !Task.isCancelled {
+            for await status in localNetworkAccessEvents() {
+                guard !Task.isCancelled else {
+                    break
+                }
+
+                localNetworkAccess = status
+                DiagnosticLog.record(
+                    "Local Network access changed: \(status.diagnosticName)"
+                )
+
+                if status == .granted {
+                    await startRemoteControl()
+                } else {
+                    await stopRemoteControl()
+                }
+            }
+
+            guard !Task.isCancelled else {
+                break
+            }
+
+            DiagnosticLog.record("Retrying Local Network access monitor")
+            await waitBeforeLocalNetworkRetry()
+        }
+
+        await stopRemoteControl()
+    }
+
     func startRemoteControl() async {
-        guard remoteServer == nil else {
+        guard localNetworkAccess == .granted,
+              remoteServer == nil else {
             return
         }
 
@@ -80,9 +172,36 @@ final class ConnectionModel {
         }
     }
 
+    func stopRemoteControl() async {
+        guard let remoteServer else {
+            return
+        }
+
+        self.remoteServer = nil
+        await remoteServer.stop()
+        DiagnosticLog.record("Remote control stopped")
+    }
+
+    func openSystemSettings() {
+        let url = URL(
+            fileURLWithPath: "/System/Applications/System Settings.app"
+        )
+        NSWorkspace.shared.open(url)
+    }
+
     func connectAndExtend(
         visionProName: String? = nil
     ) async -> RemoteResponse {
+        refreshAccessibilityPermission()
+
+        guard allRequiredPermissionsGranted else {
+            let message = missingPermissionMessage
+            DiagnosticLog.record(
+                "Connection blocked by permissions: \(message)"
+            )
+            return .failed(message: message)
+        }
+
         guard !isWorking else {
             return .busy
         }
@@ -144,6 +263,27 @@ final class ConnectionModel {
             phase = .success("Mac Virtual Display is connected.")
         } else if case .success = phase {
             phase = .ready
+        }
+    }
+
+    private var missingPermissionMessage: String {
+        if !accessibilityAccessGranted {
+            return "Grant Accessibility access to Mac Display Connect, "
+                + "then try again."
+        }
+
+        switch localNetworkAccess {
+        case .needsAccess:
+            return "Grant Local Network access to Mac Display Connect, "
+                + "then try again."
+        case .checking:
+            return "Mac Display Connect is still checking Local Network "
+                + "access. Try again in a moment."
+        case .unavailable:
+            return "Local Network access is unavailable. Check Wi-Fi "
+                + "and try again."
+        case .granted:
+            return "Grant the required permissions, then try again."
         }
     }
 }
@@ -213,6 +353,26 @@ enum ConnectionPhase: Equatable {
             "Try Again"
         case .working, .success:
             nil
+        }
+    }
+}
+
+enum MacDisplayConnectViewState: Equatable {
+    case permissions
+    case connection
+}
+
+private extension LocalNetworkAccessStatus {
+    var diagnosticName: String {
+        switch self {
+        case .checking:
+            "checking"
+        case .granted:
+            "granted"
+        case .needsAccess:
+            "needs-access"
+        case .unavailable:
+            "unavailable"
         }
     }
 }

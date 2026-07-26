@@ -11,9 +11,8 @@ struct ConnectionView: View {
         }
         .frame(width: 360)
         .padding(30)
-        .task {
+        .onAppear {
             model.refreshConnectionStatus()
-            await model.startRemoteControl()
         }
     }
 
