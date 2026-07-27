@@ -1,7 +1,15 @@
 # Mac Display Connect
 
-Start Mac Virtual Display from Apple Vision Pro, even when your Mac screen
-isn’t in view.
+Start Mac Virtual Display from Apple Vision Pro—without relying on visionOS to
+initiate the connection.
+
+Mac Display Connect replaces the unreliable built-in starting flow with a
+simple **Connect** button. Open the app on Apple Vision Pro, choose your Mac,
+and connect.
+
+Apple still provides Mac Virtual Display itself. Mac Display Connect provides a
+more reliable way to start it through the companion Mac app and macOS Screen
+Mirroring.
 
 Mac Display Connect includes two apps:
 
