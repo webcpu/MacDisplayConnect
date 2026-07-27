@@ -22,7 +22,7 @@ final class MacVirtualDisplayMonitor {
         typealias LearnedUUIDLoad =
             @MainActor () -> UUID?
         typealias LearnedUUIDSave =
-            @MainActor (UUID) -> Void
+            @MainActor (UUID?) -> Void
         typealias Wait =
             @MainActor (Duration) async throws -> Void
 
@@ -69,10 +69,16 @@ final class MacVirtualDisplayMonitor {
                     .flatMap(UUID.init(uuidString:))
             },
             saveLearnedDisplayUUID: {
-                UserDefaults.standard.set(
-                    $0.uuidString,
-                    forKey: learnedDisplayUUIDDefaultsKey
-                )
+                if let displayUUID = $0 {
+                    UserDefaults.standard.set(
+                        displayUUID.uuidString,
+                        forKey: learnedDisplayUUIDDefaultsKey
+                    )
+                } else {
+                    UserDefaults.standard.removeObject(
+                        forKey: learnedDisplayUUIDDefaultsKey
+                    )
+                }
             },
             wait: {
                 try await Task.sleep(for: $0)
@@ -81,6 +87,7 @@ final class MacVirtualDisplayMonitor {
     }
 
     private(set) var learnedDisplayUUID: UUID?
+    private var disconnectedEligibleDisplayUUIDs: Set<UUID>?
 
     private let dependencies: Dependencies
     private let confirmationAttempts: Int
@@ -88,7 +95,7 @@ final class MacVirtualDisplayMonitor {
 
     init(
         dependencies: Dependencies = .live,
-        confirmationAttempts: Int = 50,
+        confirmationAttempts: Int = 150,
         confirmationInterval: Duration = .milliseconds(100)
     ) {
         self.dependencies = dependencies
@@ -98,6 +105,10 @@ final class MacVirtualDisplayMonitor {
     }
 
     func snapshotBeforeConnectionAttempt() -> Snapshot {
+        Snapshot(eligibleDisplayUUIDs: eligibleDisplayUUIDs())
+    }
+
+    func snapshotBeforeDisconnectionAttempt() -> Snapshot {
         Snapshot(eligibleDisplayUUIDs: eligibleDisplayUUIDs())
     }
 
@@ -123,6 +134,75 @@ final class MacVirtualDisplayMonitor {
         }
 
         return false
+    }
+
+    func confirmDisconnection() async throws -> Bool {
+        for attempt in 0..<confirmationAttempts {
+            if !isConnected {
+                recordConfirmedDisconnection()
+                return true
+            }
+
+            if attempt + 1 < confirmationAttempts {
+                try await dependencies.wait(confirmationInterval)
+            }
+        }
+
+        return false
+    }
+
+    func confirmDisconnection(after snapshot: Snapshot) async throws -> Bool {
+        let trackedDisplayUUID = learnedDisplayUUID
+
+        for attempt in 0..<confirmationAttempts {
+            let currentDisplayUUIDs = eligibleDisplayUUIDs()
+            let newlyEligibleDisplayUUIDs = currentDisplayUUIDs
+                .subtracting(snapshot.eligibleDisplayUUIDs)
+
+            if newlyEligibleDisplayUUIDs.isEmpty,
+               let trackedDisplayUUID,
+               snapshot.eligibleDisplayUUIDs.contains(trackedDisplayUUID),
+               !currentDisplayUUIDs.contains(trackedDisplayUUID)
+            {
+                recordConfirmedDisconnection(
+                    eligibleDisplayUUIDs: currentDisplayUUIDs
+                )
+                return true
+            }
+
+            let removedDisplayUUIDs = snapshot.eligibleDisplayUUIDs
+                .subtracting(currentDisplayUUIDs)
+            if newlyEligibleDisplayUUIDs.isEmpty,
+               removedDisplayUUIDs.count == 1,
+               let displayUUID = removedDisplayUUIDs.first
+            {
+                learn(displayUUID)
+                recordConfirmedDisconnection(
+                    eligibleDisplayUUIDs: currentDisplayUUIDs
+                )
+                return true
+            }
+
+            if attempt + 1 < confirmationAttempts {
+                try await dependencies.wait(confirmationInterval)
+            }
+        }
+
+        return false
+    }
+
+    var isConnectedOrReconnected: Bool {
+        if isConnected {
+            return true
+        }
+
+        guard let disconnectedEligibleDisplayUUIDs else {
+            return false
+        }
+
+        return !eligibleDisplayUUIDs()
+            .subtracting(disconnectedEligibleDisplayUUIDs)
+            .isEmpty
     }
 
     var isConnected: Bool {
@@ -164,6 +244,12 @@ final class MacVirtualDisplayMonitor {
         return true
     }
 
+    func confirmAlreadyDisconnected() {
+        learnedDisplayUUID = nil
+        dependencies.saveLearnedDisplayUUID(nil)
+        recordConfirmedDisconnection()
+    }
+
     private func eligibleDisplayUUIDs() -> Set<UUID> {
         let displayIDs = dependencies.onlineDisplayIDs()
             .intersection(dependencies.activeDisplayIDs())
@@ -189,6 +275,13 @@ final class MacVirtualDisplayMonitor {
     private func learn(_ displayUUID: UUID) {
         learnedDisplayUUID = displayUUID
         dependencies.saveLearnedDisplayUUID(displayUUID)
+    }
+
+    private func recordConfirmedDisconnection(
+        eligibleDisplayUUIDs: Set<UUID>? = nil
+    ) {
+        disconnectedEligibleDisplayUUIDs =
+            eligibleDisplayUUIDs ?? self.eligibleDisplayUUIDs()
     }
 }
 

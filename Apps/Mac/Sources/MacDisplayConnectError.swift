@@ -6,6 +6,7 @@ enum MacDisplayConnectError: LocalizedError {
     case screenMirroringControlNotFound
     case visionProControlNotFound
     case connectionNotConfirmed
+    case disconnectionNotConfirmed
 
     var errorDescription: String? {
         switch self {
@@ -19,6 +20,8 @@ enum MacDisplayConnectError: LocalizedError {
             "No Apple Vision Pro was found in Screen Mirroring."
         case .connectionNotConfirmed:
             "Mac Virtual Display did not become active."
+        case .disconnectionNotConfirmed:
+            "Mac Virtual Display did not disconnect."
         }
     }
 }

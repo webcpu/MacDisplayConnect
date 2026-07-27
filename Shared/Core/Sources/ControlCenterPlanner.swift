@@ -35,9 +35,18 @@ public enum ControlCenterAction: Equatable, Sendable {
     case visionProNotFound
 }
 
+public enum ControlCenterDisconnectAction: Equatable, Sendable {
+    case expandVisionPro(elementIndex: Int)
+    case disconnectAirPlayDevice(elementIndex: Int)
+    case disconnectSidecar(elementIndex: Int)
+    case alreadyDisconnected
+    case visionProNotFound
+}
+
 public enum ControlCenterNavigationAction: Equatable, Sendable {
     case openControlCenter(elementIndex: Int)
     case openScreenMirroring(elementIndex: Int)
+    case screenMirroringAlreadyOpen
     case screenMirroringNotFound
 }
 
@@ -45,7 +54,13 @@ public enum ControlCenterNavigationPlanner {
     public static func action(
         for elements: [ControlCenterElement]
     ) -> ControlCenterNavigationAction {
-        screenMirroringModule(in: elements)
+        if elements.contains(where: {
+            $0.identifier == "screen-mirroring-header"
+        }) {
+            return .screenMirroringAlreadyOpen
+        }
+
+        return screenMirroringModule(in: elements)
             .map { .openScreenMirroring(elementIndex: $0.index) }
             ?? controlCenterElement(in: elements)
                 .map { .openControlCenter(elementIndex: $0.index) }
@@ -97,7 +112,7 @@ public enum ControlCenterPlanner {
         )
     }
 
-    private static func visionProIdentifier(
+    fileprivate static func visionProIdentifier(
         in elements: [ControlCenterElement],
         named visionProName: String
     ) -> String? {
@@ -213,6 +228,183 @@ public enum ControlCenterPlanner {
             return .visionProNotFound
         }
         return .selectMacVirtualDisplay(elementIndex: visionPro.index)
+    }
+}
+
+public enum ControlCenterDisconnectPlanner {
+    public static func action(
+        for elements: [ControlCenterElement],
+        visionProName: String? = nil
+    ) -> ControlCenterDisconnectAction {
+        guard let identifier = ControlCenterPlanner.visionProIdentifier(
+            in: elements,
+            named: visionProName ?? "Apple Vision Pro"
+        ) else {
+            return .visionProNotFound
+        }
+
+        let matchingCheckboxes = elements.filter {
+            $0.kind == .checkbox && $0.identifier == identifier
+        }
+        let sidecarVisionProRows = matchingCheckboxes.filter(
+            \.describesVisionPro
+        )
+        if identifier.hasPrefix("screen-mirroring-device-Sidecar:"),
+           let sidecarVisionPro = sidecarVisionProRows.first,
+           let isSelected = sidecarVisionPro.isSelected,
+           sidecarVisionProRows.count == 1,
+           matchingCheckboxes.count == sidecarVisionProRows.count
+        {
+            return isSelected
+                ? .disconnectSidecar(
+                    elementIndex: sidecarVisionPro.index
+                )
+                : .alreadyDisconnected
+        }
+
+        guard identifier.hasPrefix("screen-mirroring-device-AirPlay:")
+        else {
+            return .visionProNotFound
+        }
+
+        let devicePositions = elements.indices.filter {
+            elements[$0].identifier == identifier
+                && elements[$0].kind != .other
+                && elements[$0].describesVisionPro
+        }
+        let deviceRows = devicePositions.map { elements[$0] }
+        guard let deviceRow = deviceRows.first,
+              deviceRows.dropFirst().allSatisfy({
+                  ElementSignature($0) == ElementSignature(deviceRow)
+              })
+        else {
+            return .visionProNotFound
+        }
+
+        guard let modeGroups = airPlayModeGroups(
+            in: elements,
+            identifier: identifier,
+            devicePositions: devicePositions
+        ),
+            let modeRows = modeGroups.first
+        else {
+            return .visionProNotFound
+        }
+        let modeSignature = modeRows.map(ElementSignature.init)
+        guard modeGroups.dropFirst().allSatisfy({
+            $0.map(ElementSignature.init) == modeSignature
+        }) else {
+            return .visionProNotFound
+        }
+
+        let macVirtualDisplayRows = modeRows.filter(
+            \.describesMacVirtualDisplay
+        )
+        guard !macVirtualDisplayRows.isEmpty else {
+            if deviceRow.kind == .checkbox,
+               deviceRow.isSelected == false,
+               modeRows.isEmpty
+            {
+                return .alreadyDisconnected
+            }
+            if deviceRow.kind == .disclosure,
+               deviceRow.isSelected == false,
+               modeRows.isEmpty
+            {
+                return .expandVisionPro(elementIndex: deviceRow.index)
+            }
+            return .visionProNotFound
+        }
+
+        guard modeRows.allSatisfy({ $0.kind == .checkbox }),
+              macVirtualDisplayRows.count == 1,
+              let macVirtualDisplay = macVirtualDisplayRows.first,
+              let isSelected = macVirtualDisplay.isSelected
+        else {
+            return .visionProNotFound
+        }
+
+        let otherModeRows = modeRows.filter {
+            !$0.describesMacVirtualDisplay
+        }
+        guard otherModeRows.allSatisfy({
+            $0.isSelected == false
+        }) else {
+            return .visionProNotFound
+        }
+
+        guard isSelected else {
+            return .alreadyDisconnected
+        }
+        guard deviceRow.kind == .disclosure,
+              deviceRow.isSelected == true
+        else {
+            return .visionProNotFound
+        }
+        return .disconnectAirPlayDevice(elementIndex: deviceRow.index)
+    }
+
+    private static func airPlayModeGroups(
+        in elements: [ControlCenterElement],
+        identifier: String,
+        devicePositions: [Int]
+    ) -> [[ControlCenterElement]]? {
+        let devicePositionSet = Set(devicePositions)
+        var accountedPositions = devicePositionSet
+        var groups: [[ControlCenterElement]] = []
+
+        for devicePosition in devicePositions {
+            let groupEnd = elements.indices.first {
+                guard $0 > devicePosition else {
+                    return false
+                }
+                if devicePositionSet.contains($0) {
+                    return true
+                }
+
+                let element = elements[$0]
+                guard element.kind != .other,
+                      let candidateIdentifier = element.identifier,
+                      candidateIdentifier.hasPrefix(
+                          "screen-mirroring-device-"
+                      )
+                else {
+                    return false
+                }
+                return candidateIdentifier != identifier
+                    || element.kind == .disclosure
+            } ?? elements.endIndex
+
+            let modePositions = elements.indices.filter {
+                $0 > devicePosition
+                    && $0 < groupEnd
+                    && elements[$0].identifier == identifier
+                    && elements[$0].kind != .other
+            }
+            accountedPositions.formUnion(modePositions)
+            groups.append(modePositions.map { elements[$0] })
+        }
+
+        let actionablePositions = Set(elements.indices.filter {
+            elements[$0].identifier == identifier
+                && elements[$0].kind != .other
+        })
+        guard accountedPositions == actionablePositions else {
+            return nil
+        }
+        return groups
+    }
+
+    private struct ElementSignature: Equatable {
+        let kind: ControlCenterElement.Kind
+        let text: [String]
+        let isSelected: Bool?
+
+        init(_ element: ControlCenterElement) {
+            kind = element.kind
+            text = element.text.map(\.normalizedForMatching)
+            isSelected = element.isSelected
+        }
     }
 }
 

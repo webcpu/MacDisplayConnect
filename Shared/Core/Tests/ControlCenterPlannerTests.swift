@@ -38,6 +38,29 @@ struct ControlCenterPlannerTests {
         )
     }
 
+    @Test("recognizes the open Screen Mirroring panel by its header")
+    func recognizesOpenScreenMirroringPanel() {
+        let elements = [
+            element(
+                index: 3,
+                kind: .other,
+                identifier: "screen-mirroring-header",
+                text: ["Screen Mirroring"]
+            ),
+            element(
+                index: 17,
+                kind: .other,
+                identifier: "com.apple.menuextra.controlcenter",
+                text: ["Control Center"]
+            ),
+        ]
+
+        #expect(
+            ControlCenterNavigationPlanner.action(for: elements)
+                == .screenMirroringAlreadyOpen
+        )
+    }
+
     @Test("reopens Control Center when a stale Screen Mirroring panel is open")
     func reopensControlCenterFromStaleScreenMirroringPanel() {
         let elements = [

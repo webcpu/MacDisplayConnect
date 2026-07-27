@@ -22,6 +22,8 @@ swift test
 swift build
 ./scripts/build-app.sh
 open ".build/products/Mac Display Connect.app"
+./scripts/system-test.sh --cycles 20 \
+  --vision-pro-name "S’s Apple Vision Pro"
 xcodebuild test -workspace MacDisplayConnect.xcworkspace \
   -scheme MacDisplayConnectVision \
   -destination "platform=visionOS Simulator,name=Apple Vision Pro"
@@ -58,6 +60,8 @@ Unit-test the protocol, discovery mapping, state models, and all Control Center
 decisions without invoking macOS UI. Test transport through a real loopback TCP
 connection. Build and launch the companion on the Vision Pro simulator. The
 final Mac Virtual Display connection requires an unlocked physical Vision Pro.
+The opt-in system-test launcher exercises repeated connect/disconnect cycles on
+that physical device and writes a per-run report.
 
 ## Boundaries
 

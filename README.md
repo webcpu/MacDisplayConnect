@@ -169,6 +169,32 @@ xcodebuild test -workspace MacDisplayConnect.xcworkspace \
   -destination "platform=visionOS Simulator,name=Apple Vision Pro"
 ```
 
+### Run the physical-device system test
+
+The system test repeatedly connects and disconnects a physical Apple Vision Pro
+through macOS Control Center:
+
+```sh
+./scripts/system-test.sh --cycles 20 \
+  --vision-pro-name "S’s Apple Vision Pro"
+```
+
+Before starting, quit **Mac Display Connect** and keep Apple Vision Pro worn,
+unlocked, and within range for the entire run. Make sure Accessibility access is
+already enabled for the signed app bundle produced by `build-app.sh`. The script
+builds that app and refuses to start while another copy is running. System-test
+mode is explicit: if Mac Virtual Display is already connected, its preflight
+disconnects it before the counted cycles begin.
+
+Every cycle confirms the disconnected state, connects, verifies a stable
+connection, keeps it connected for five seconds, disconnects, and verifies a
+stable disconnected state. A run passes only when every requested cycle passes.
+Reports and failure logs are stored under
+`~/Library/Logs/Mac Display Connect/System Tests/`.
+
+This exercises the real Mac Virtual Display lifecycle on physical hardware. It
+does not automate the native visionOS app interface.
+
 Build the Mac app:
 
 ```sh
