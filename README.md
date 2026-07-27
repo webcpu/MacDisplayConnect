@@ -37,22 +37,35 @@ more information.
 
 1. Open Terminal.
 2. Go to the root of the project folder.
-3. Build and package the Mac app:
+3. Build and run the Mac app:
 
    ```sh
-   ./scripts/build-app.sh
+   ./run.sh
    ```
 
-4. Open the app:
+The run script closes any existing Mac Display Connect instance, builds and
+signs the app bundle, and opens the app. Use it rather than `swift run` so the
+Accessibility and Local Network permission prompts are associated with the app
+bundle.
 
-   ```sh
-   open ".build/products/Mac Display Connect.app"
-   ```
+## Create a Mac installer
 
-The build script creates **Mac Display Connect.app** in `.build/products`. You
-can move it to your Applications folder. Use the build script rather than
-`swift run`: the script creates and signs the app bundle with the metadata
-needed for Accessibility and Local Network permission prompts.
+Install the DMG layout tools once:
+
+```sh
+npm install --global create-dmg@7.1.0
+brew install graphicsmagick imagemagick
+```
+
+Create and open a DMG for local installation:
+
+```sh
+./make-dmg.sh
+```
+
+Drag **Mac Display Connect** to the **Applications** shortcut in the opened
+DMG. This local DMG is intended for your own Mac. Use the release script below
+to create a signed and notarized build for distribution.
 
 ### Allow Accessibility access
 
@@ -181,10 +194,10 @@ through macOS Control Center:
 
 Before starting, quit **Mac Display Connect** and keep Apple Vision Pro worn,
 unlocked, and within range for the entire run. Make sure Accessibility access is
-already enabled for the signed app bundle produced by `build-app.sh`. The script
-builds that app and refuses to start while another copy is running. System-test
-mode is explicit: if Mac Virtual Display is already connected, its preflight
-disconnects it before the counted cycles begin.
+already enabled for the signed Mac app bundle. The system-test script rebuilds
+that app and refuses to start while another copy is running. System-test mode is
+explicit: if Mac Virtual Display is already connected, its preflight disconnects
+it before the counted cycles begin.
 
 Every cycle confirms the disconnected state, connects, verifies a stable
 connection, keeps it connected for five seconds, disconnects, and verifies a
@@ -195,21 +208,41 @@ Reports and failure logs are stored under
 This exercises the real Mac Virtual Display lifecycle on physical hardware. It
 does not automate the native visionOS app interface.
 
-Build the Mac app:
+Build and run the Mac app:
 
 ```sh
-./scripts/build-app.sh
+./run.sh
 ```
+
+### Release the Mac app
+
+Release a signed and notarized Mac build from a clean, synchronized `main`
+branch:
+
+```sh
+./scripts/release.sh 1.0.0
+```
+
+The script runs the Swift package tests, builds and validates a Release app,
+creates a notarized DMG, tags the release, and publishes it to GitHub. It uses
+the `xdigest-notary` keychain profile by default. Set
+`MAC_DISPLAY_CONNECT_NOTARY_PROFILE` to use a different profile. This releases
+only the macOS app; distribute the Apple Vision Pro app separately through
+Xcode or TestFlight.
 
 ### Project layout
 
 ```text
-Apps/Mac/          Mac app sources and tests
-Apps/Vision/       Apple Vision Pro app, Xcode project, and tests
-Shared/Core/       Shared protocol and pure connection-planning logic
-Shared/Transport/  Local Bonjour discovery and request transport
-scripts/           Build and packaging commands
-docs/              Design and testing documentation
+Apps/Mac/               Mac app sources and tests
+Apps/Vision/            Apple Vision Pro app, Xcode project, and tests
+Shared/Core/            Shared protocol and pure connection-planning logic
+Shared/Transport/       Local Bonjour discovery and request transport
+run.sh                  Build and open the Mac app
+make-dmg.sh             Build and open a local drag-to-install DMG
+scripts/build-app.sh    Shared app-bundle builder used by the other scripts
+scripts/release.sh      Signed, notarized GitHub release workflow
+scripts/system-test.sh  Optional physical-device regression test
+docs/                   Design and testing documentation
 ```
 
 For implementation details and testing boundaries, see the
