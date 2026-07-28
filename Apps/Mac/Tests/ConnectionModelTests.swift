@@ -105,23 +105,24 @@ struct ConnectionModelTests {
         #expect(response == .succeeded(message: message))
     }
 
-    @Test("a remote request still connects when the Mac app cannot activate")
-    func remoteRequestContinuesWhenApplicationCannotActivate() async {
+    @Test("a remote request stops when the Mac app cannot activate")
+    func remoteRequestStopsWhenApplicationCannotActivate() async {
         var didConnect = false
-        let message = "Mac Virtual Display is connected."
+        let message =
+            "Mac Display Connect could not move to the foreground. Try again."
         let model = makeConnectionModel(
             connect: { _ in
                 didConnect = true
-                return message
+                return "Mac Virtual Display is connected."
             },
             activateForRemoteConnection: { false }
         )
 
         let response = await model.handleRemoteConnect()
 
-        #expect(didConnect)
-        #expect(response == .succeeded(message: message))
-        #expect(model.phase == .success(message))
+        #expect(!didConnect)
+        #expect(response == .failed(message: message))
+        #expect(model.phase == .failure(message))
     }
 
     @Test("a remote request forwards the requested Vision Pro name")
@@ -229,6 +230,30 @@ struct ConnectionModelTests {
                 == .succeeded(message: "Mac Virtual Display is connected.")
         )
         #expect(finalInvocationCount == 1)
+    }
+
+    @Test("a busy remote request does not replace the working phase")
+    func busyRemoteRequestPreservesWorkingPhase() async {
+        let operation = SuspendedConnectOperation()
+        let model = makeConnectionModel(
+            connect: { _ in
+                await operation.run()
+            },
+            activateForRemoteConnection: { false }
+        )
+
+        let firstRequest = Task { @MainActor in
+            await model.connectAndExtend()
+        }
+        await operation.waitUntilStarted()
+
+        let secondResponse = await model.handleRemoteConnect()
+
+        #expect(secondResponse == .busy)
+        #expect(model.phase == .working)
+
+        await operation.release()
+        _ = await firstRequest.value
     }
 
     @Test("shows permissions until every required permission is granted")

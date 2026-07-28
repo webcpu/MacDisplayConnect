@@ -1,5 +1,4 @@
 import AppKit
-import ApplicationServices
 import MacDisplayConnectCore
 import MacDisplayConnectTransport
 import Foundation
@@ -247,9 +246,23 @@ final class ConnectionModel {
             "Remote connect request received; target="
                 + (visionProName ?? "automatic")
         )
+        guard !isWorking else {
+            DiagnosticLog.record("Remote response: busy")
+            return .busy
+        }
+
         DiagnosticLog.record("Activating Mac app for remote request")
         let isApplicationActive = await activateForRemoteConnection()
         DiagnosticLog.record("Mac app active: \(isApplicationActive)")
+        guard isApplicationActive else {
+            let message =
+                "Mac Display Connect could not move to the foreground. "
+                    + "Try again."
+            phase = .failure(message)
+            DiagnosticLog.record("Remote response: failed")
+            return .failed(message: message)
+        }
+
         let response = await connectAndExtend(visionProName: visionProName)
         DiagnosticLog.record("Remote response: \(response.diagnosticName)")
         return response
@@ -295,17 +308,25 @@ private func activateApplication() async -> Bool {
     NSApp.activate()
 
     if !NSApp.isActive {
-        let application = AXUIElementCreateApplication(
-            ProcessInfo.processInfo.processIdentifier
-        )
-        let error = AXUIElementSetAttributeValue(
-            application,
-            kAXFrontmostAttribute as CFString,
-            kCFBooleanTrue
-        )
-        DiagnosticLog.record(
-            "Accessibility foreground activation: AXError=\(error.rawValue)"
-        )
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        configuration.addsToRecentItems = false
+
+        do {
+            let application = try await NSWorkspace.shared.openApplication(
+                at: Bundle.main.bundleURL,
+                configuration: configuration
+            )
+            DiagnosticLog.record(
+                "Workspace foreground activation requested: pid="
+                    + "\(application.processIdentifier)"
+            )
+        } catch {
+            DiagnosticLog.record(
+                "Workspace foreground activation failed: "
+                    + error.localizedDescription
+            )
+        }
     }
 
     for _ in 0..<20 where !NSApp.isActive {
