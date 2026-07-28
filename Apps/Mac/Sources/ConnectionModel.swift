@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import MacDisplayConnectCore
 import MacDisplayConnectTransport
 import Foundation
@@ -292,6 +293,20 @@ final class ConnectionModel {
 private func activateApplication() async -> Bool {
     NSApp.windows.first(where: \.isVisible)?.makeKeyAndOrderFront(nil)
     NSApp.activate()
+
+    if !NSApp.isActive {
+        let application = AXUIElementCreateApplication(
+            ProcessInfo.processInfo.processIdentifier
+        )
+        let error = AXUIElementSetAttributeValue(
+            application,
+            kAXFrontmostAttribute as CFString,
+            kCFBooleanTrue
+        )
+        DiagnosticLog.record(
+            "Accessibility foreground activation: AXError=\(error.rawValue)"
+        )
+    }
 
     for _ in 0..<20 where !NSApp.isActive {
         try? await Task.sleep(for: .milliseconds(50))

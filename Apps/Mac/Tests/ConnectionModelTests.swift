@@ -105,6 +105,25 @@ struct ConnectionModelTests {
         #expect(response == .succeeded(message: message))
     }
 
+    @Test("a remote request still connects when the Mac app cannot activate")
+    func remoteRequestContinuesWhenApplicationCannotActivate() async {
+        var didConnect = false
+        let message = "Mac Virtual Display is connected."
+        let model = makeConnectionModel(
+            connect: { _ in
+                didConnect = true
+                return message
+            },
+            activateForRemoteConnection: { false }
+        )
+
+        let response = await model.handleRemoteConnect()
+
+        #expect(didConnect)
+        #expect(response == .succeeded(message: message))
+        #expect(model.phase == .success(message))
+    }
+
     @Test("a remote request forwards the requested Vision Pro name")
     func remoteRequestForwardsVisionProName() async {
         let model = makeConnectionModel(
