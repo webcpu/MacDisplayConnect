@@ -14,6 +14,9 @@
 		901066BAD0909EEDB4404F07 /* MacDisplayConnectVisionApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7A8770718D34483BDD82402 /* MacDisplayConnectVisionApp.swift */; };
 		ED7F2D5EE86AAF2FBF57B277 /* VisionConnectionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8B5CD6D73D749E757F02E59 /* VisionConnectionModel.swift */; };
 		F2EBB31F099C94951F0869F4 /* VisionConnectionModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1427D6F84EC468699794A63D /* VisionConnectionModelTests.swift */; };
+		AC0100000000000000000001 /* AutoConnectPreferenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0100000000000000000002 /* AutoConnectPreferenceTests.swift */; };
+		AC0200000000000000000001 /* AutoConnectPreference.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0200000000000000000002 /* AutoConnectPreference.swift */; };
+		AC0300000000000000000001 /* AutoConnectOptionsMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0300000000000000000002 /* AutoConnectOptionsMenu.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -35,6 +38,9 @@
 		BD428B73FF23BC5532B1AF42 /* MacDisplayConnectVisionTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MacDisplayConnectVisionTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F7A8770718D34483BDD82402 /* MacDisplayConnectVisionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacDisplayConnectVisionApp.swift; sourceTree = "<group>"; };
 		F8B5CD6D73D749E757F02E59 /* VisionConnectionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionConnectionModel.swift; sourceTree = "<group>"; };
+		AC0100000000000000000002 /* AutoConnectPreferenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoConnectPreferenceTests.swift; sourceTree = "<group>"; };
+		AC0200000000000000000002 /* AutoConnectPreference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoConnectPreference.swift; sourceTree = "<group>"; };
+		AC0300000000000000000002 /* AutoConnectOptionsMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoConnectOptionsMenu.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -53,6 +59,8 @@
 		4D95A0C078D4D9BB8C428537 /* MacDisplayConnectVision */ = {
 			isa = PBXGroup;
 			children = (
+				AC0300000000000000000002 /* AutoConnectOptionsMenu.swift */,
+				AC0200000000000000000002 /* AutoConnectPreference.swift */,
 				F7A8770718D34483BDD82402 /* MacDisplayConnectVisionApp.swift */,
 				F8B5CD6D73D749E757F02E59 /* VisionConnectionModel.swift */,
 				28180A0FD0E498A9E1599AD7 /* VisionConnectionView.swift */,
@@ -81,6 +89,7 @@
 		ECEC6119C01C5A2D59048243 /* MacDisplayConnectVisionTests */ = {
 			isa = PBXGroup;
 			children = (
+				AC0100000000000000000002 /* AutoConnectPreferenceTests.swift */,
 				1427D6F84EC468699794A63D /* VisionConnectionModelTests.swift */,
 			);
 			path = Tests;
@@ -190,6 +199,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AC0100000000000000000001 /* AutoConnectPreferenceTests.swift in Sources */,
 				F2EBB31F099C94951F0869F4 /* VisionConnectionModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -198,6 +208,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AC0300000000000000000001 /* AutoConnectOptionsMenu.swift in Sources */,
+				AC0200000000000000000001 /* AutoConnectPreference.swift in Sources */,
 				901066BAD0909EEDB4404F07 /* MacDisplayConnectVisionApp.swift in Sources */,
 				ED7F2D5EE86AAF2FBF57B277 /* VisionConnectionModel.swift in Sources */,
 				6E96AF5FF6C6703BFD73AC3F /* VisionConnectionView.swift in Sources */,

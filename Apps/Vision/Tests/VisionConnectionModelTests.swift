@@ -64,6 +64,341 @@ struct VisionConnectionModelTests {
         #expect(model.phase == .ready)
     }
 
+    @Test("auto-connects to the discovered preferred Mac when active")
+    func autoConnectsWhenSceneBecomesActive() async {
+        let mac = makeMac(name: "Studio Mac")
+        let events = AsyncStream<RemoteDiscoveryEvent> { continuation in
+            continuation.yield(.results([mac]))
+            continuation.finish()
+        }
+        let endpoints = EndpointProbe()
+        let model = VisionConnectionModel(
+            discover: { events },
+            connect: { _, endpoint in
+                await endpoints.record(endpoint)
+                return .failed(message: "Not connected")
+            }
+        )
+
+        await model.startDiscovery()
+        await model.connect(to: mac)
+        await model.sceneDidBecomeActive()
+
+        #expect(await endpoints.values() == [mac.endpoint, mac.endpoint])
+        #expect(model.phase == .failure("Not connected"))
+    }
+
+    @Test("waits for the preferred Mac and retries only on discovery updates")
+    func waitsForPreferredMacAndDiscoveryUpdates() async {
+        let preferredMac = makeMac(name: "Studio Mac")
+        let otherMac = makeMac(name: "Other Mac")
+        let events = AsyncStream<RemoteDiscoveryEvent> { continuation in
+            continuation.yield(.results([otherMac]))
+            continuation.yield(.results([otherMac, preferredMac]))
+            continuation.yield(.results([preferredMac, otherMac]))
+            continuation.finish()
+        }
+        let endpoints = EndpointProbe()
+        let model = VisionConnectionModel(
+            discover: { events },
+            connect: { _, endpoint in
+                await endpoints.record(endpoint)
+                return .failed(message: "Not connected")
+            }
+        )
+
+        await model.connect(to: preferredMac)
+        await model.sceneDidBecomeActive()
+        await model.startDiscovery()
+
+        #expect(
+            await endpoints.values()
+                == [
+                    preferredMac.endpoint,
+                    preferredMac.endpoint,
+                    preferredMac.endpoint,
+                ]
+        )
+        #expect(model.phase == .failure("Not connected"))
+    }
+
+    @Test("auto-connect decision requires the discovered preferred Mac")
+    func autoConnectRequiresDiscoveredPreferredMac() {
+        let preferredMac = makeMac(name: "Studio Mac")
+        let otherMac = makeMac(name: "Other Mac")
+
+        #expect(
+            autoConnectDecision(
+                isEnabled: true,
+                isArmed: true,
+                phase: .ready,
+                preferredMac: preferredMac,
+                discoveredMacs: [otherMac]
+            ) == .waitForPreferredMac
+        )
+        #expect(
+            autoConnectDecision(
+                isEnabled: true,
+                isArmed: true,
+                phase: .ready,
+                preferredMac: preferredMac,
+                discoveredMacs: [otherMac, preferredMac]
+            ) == .connect(preferredMac)
+        )
+    }
+
+    @Test("disabled auto-connect consumes an armed decision")
+    func disabledAutoConnectDecision() {
+        let preferredMac = makeMac(name: "Studio Mac")
+
+        #expect(
+            autoConnectDecision(
+                isEnabled: false,
+                isArmed: true,
+                phase: .ready,
+                preferredMac: preferredMac,
+                discoveredMacs: [preferredMac]
+            ) == .disabled
+        )
+    }
+
+    @Test("disabled preference prevents auto-connect at activation")
+    func disabledPreferencePreventsActivationAutoConnect() async {
+        let mac = makeMac(name: "Studio Mac")
+        let events = AsyncStream<RemoteDiscoveryEvent> { continuation in
+            continuation.yield(.results([mac]))
+            continuation.finish()
+        }
+        let endpoints = EndpointProbe()
+        let preference = AutoConnectEnabledProbe(false)
+        let model = VisionConnectionModel(
+            discover: { events },
+            autoConnectEnabled: { preference.value },
+            connect: { _, endpoint in
+                await endpoints.record(endpoint)
+                return .failed(message: "Not connected")
+            }
+        )
+        await model.startDiscovery()
+        await model.connect(to: mac)
+
+        await model.sceneDidBecomeActive()
+
+        #expect(await endpoints.values() == [mac.endpoint])
+        #expect(model.phase == .failure("Not connected"))
+    }
+
+    @Test("disabling while waiting prevents later discovery auto-connect")
+    func disablingWhileWaitingPreventsDiscoveryAutoConnect() async {
+        let mac = makeMac(name: "Studio Mac")
+        let events = AsyncStream<RemoteDiscoveryEvent> { continuation in
+            continuation.yield(.results([mac]))
+            continuation.finish()
+        }
+        let endpoints = EndpointProbe()
+        let preference = AutoConnectEnabledProbe(true)
+        let model = VisionConnectionModel(
+            discover: { events },
+            autoConnectEnabled: { preference.value },
+            connect: { _, endpoint in
+                await endpoints.record(endpoint)
+                return .failed(message: "Not connected")
+            }
+        )
+        await model.connect(to: mac)
+        await model.sceneDidBecomeActive()
+        preference.value = false
+
+        await model.startDiscovery()
+
+        #expect(await endpoints.values() == [mac.endpoint])
+        #expect(model.phase == .failure("Not connected"))
+    }
+
+    @Test("manual connection remains available while auto-connect is disabled")
+    func manualConnectionWorksWhileAutoConnectDisabled() async {
+        let mac = makeMac(name: "Studio Mac")
+        let endpoints = EndpointProbe()
+        let model = VisionConnectionModel(
+            discover: emptyDiscovery,
+            autoConnectEnabled: { false },
+            connect: { _, endpoint in
+                await endpoints.record(endpoint)
+                return .succeeded(message: "Connected")
+            }
+        )
+
+        await model.connect(to: mac)
+
+        #expect(await endpoints.values() == [mac.endpoint])
+        #expect(model.phase == .success("Connected"))
+    }
+
+    @Test("re-enabling waits for a later automatic opportunity")
+    func reenablingWaitsForFutureDiscovery() async {
+        let mac = makeMac(name: "Studio Mac")
+        let (events, continuation) =
+            AsyncStream<RemoteDiscoveryEvent>.makeStream()
+        let endpoints = EndpointProbe()
+        let preference = AutoConnectEnabledProbe(false)
+        let model = VisionConnectionModel(
+            discover: { events },
+            autoConnectEnabled: { preference.value },
+            connect: { _, endpoint in
+                await endpoints.record(endpoint)
+                return .failed(message: "Not connected")
+            }
+        )
+        await model.connect(to: mac)
+        await model.sceneDidBecomeActive()
+        preference.value = true
+
+        #expect(await endpoints.values() == [mac.endpoint])
+
+        let discovery = Task { @MainActor in
+            await model.startDiscovery()
+        }
+        continuation.yield(.results([mac]))
+        continuation.finish()
+        await discovery.value
+
+        #expect(await endpoints.values() == [mac.endpoint, mac.endpoint])
+    }
+
+    @Test("disabling during an auto-connect clears its pending intent")
+    func disablingDuringAutoConnectClearsPendingIntent() async {
+        let mac = makeMac(name: "Studio Mac")
+        let events = AsyncStream<RemoteDiscoveryEvent> { continuation in
+            continuation.yield(.results([mac]))
+            continuation.finish()
+        }
+        let connection = DelayedAutoConnectOperation()
+        let preference = AutoConnectEnabledProbe(true)
+        let model = VisionConnectionModel(
+            discover: { events },
+            autoConnectEnabled: { preference.value },
+            connect: { _, endpoint in
+                await connection.run(endpoint: endpoint)
+            },
+            status: { _ in .status(isConnected: false) }
+        )
+        await model.startDiscovery()
+        await model.connect(to: mac)
+        let activation = Task { @MainActor in
+            await model.sceneDidBecomeActive()
+        }
+        await connection.waitUntilAutoConnectRequested()
+        preference.value = false
+        await connection.releaseAutoConnect(
+            .failed(message: "Not connected")
+        )
+        await activation.value
+
+        preference.value = true
+        await model.refreshStatus()
+
+        #expect(
+            await connection.endpoints()
+                == [mac.endpoint, mac.endpoint]
+        )
+    }
+
+    @Test("does not auto-connect again while already connected")
+    func skipsAutoConnectWhenConnected() async {
+        let mac = makeMac(name: "Studio Mac")
+        let endpoints = EndpointProbe()
+        let model = VisionConnectionModel(
+            discover: emptyDiscovery,
+            connect: { _, endpoint in
+                await endpoints.record(endpoint)
+                return .succeeded(message: "Connected")
+            },
+            status: { _ in .status(isConnected: true) }
+        )
+
+        await model.connect(to: mac)
+        await model.sceneDidBecomeActive()
+        await model.refreshStatus()
+
+        #expect(await endpoints.values() == [mac.endpoint])
+        #expect(
+            model.phase
+                == .success("Mac Virtual Display is connected.")
+        )
+    }
+
+    @Test("reconnects when status corrects stale connected state after activation")
+    func reconnectsAfterActiveStatusRefresh() async {
+        let mac = makeMac(name: "Studio Mac")
+        let events = AsyncStream<RemoteDiscoveryEvent> { continuation in
+            continuation.yield(.results([mac]))
+            continuation.finish()
+        }
+        let endpoints = EndpointProbe()
+        let model = VisionConnectionModel(
+            discover: { events },
+            connect: { _, endpoint in
+                await endpoints.record(endpoint)
+                return .succeeded(message: "Connected")
+            },
+            status: { _ in .status(isConnected: false) }
+        )
+        await model.startDiscovery()
+        await model.connect(to: mac)
+
+        await model.sceneDidBecomeActive()
+        await model.refreshStatus()
+
+        #expect(await endpoints.values() == [mac.endpoint, mac.endpoint])
+        #expect(model.phase == .success("Connected"))
+    }
+
+    @Test("does not auto-connect while a connection attempt is in progress")
+    func skipsAutoConnectWhileConnecting() async {
+        let mac = makeMac(name: "Studio Mac")
+        let connection = SuspendedConnectOperation()
+        let model = VisionConnectionModel(
+            discover: emptyDiscovery,
+            connect: { _, endpoint in
+                await connection.run(endpoint: endpoint)
+            }
+        )
+        let manualConnection = Task { @MainActor in
+            await model.connect(to: mac)
+        }
+        await connection.waitUntilRequested()
+
+        await model.sceneDidBecomeActive()
+
+        #expect(await connection.endpoints() == [mac.endpoint])
+        await connection.release(.succeeded(message: "Connected"))
+        await manualConnection.value
+    }
+
+    @Test("does not auto-connect after the active session ends")
+    func doesNotAutoConnectAfterSceneLeavesActive() async {
+        let mac = makeMac(name: "Studio Mac")
+        let events = AsyncStream<RemoteDiscoveryEvent> { continuation in
+            continuation.yield(.results([mac]))
+            continuation.finish()
+        }
+        let endpoints = EndpointProbe()
+        let model = VisionConnectionModel(
+            discover: { events },
+            connect: { _, endpoint in
+                await endpoints.record(endpoint)
+                return .succeeded(message: "Connected")
+            }
+        )
+
+        await model.sceneDidBecomeActive()
+        model.sceneDidLeaveActive()
+        await model.startDiscovery()
+
+        #expect(await endpoints.values().isEmpty)
+        #expect(model.phase == .ready)
+    }
+
     @Test("connects to the selected Mac and shows its success")
     func connectsToSelectedMac() async {
         let mac = makeMac(name: "Desk Mac")
@@ -353,6 +688,15 @@ private final class VisionProNameProbe {
     }
 }
 
+@MainActor
+private final class AutoConnectEnabledProbe {
+    var value: Bool
+
+    init(_ value: Bool) {
+        self.value = value
+    }
+}
+
 private actor SuspendedStatusOperation {
     private var didStart = false
     private var startWaiters: [CheckedContinuation<Void, Never>] = []
@@ -380,6 +724,82 @@ private actor SuspendedStatusOperation {
     }
 
     func release(_ response: RemoteResponse) {
+        responseWaiter?.resume(returning: response)
+        responseWaiter = nil
+    }
+}
+
+private actor SuspendedConnectOperation {
+    private var recordedEndpoints: [NWEndpoint] = []
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private var responseWaiter:
+        CheckedContinuation<RemoteResponse, Never>?
+
+    func run(endpoint: NWEndpoint) async -> RemoteResponse {
+        recordedEndpoints.append(endpoint)
+        startWaiters.forEach { $0.resume() }
+        startWaiters.removeAll()
+
+        return await withCheckedContinuation { continuation in
+            responseWaiter = continuation
+        }
+    }
+
+    func waitUntilRequested() async {
+        guard recordedEndpoints.isEmpty else {
+            return
+        }
+
+        await withCheckedContinuation { continuation in
+            startWaiters.append(continuation)
+        }
+    }
+
+    func endpoints() -> [NWEndpoint] {
+        recordedEndpoints
+    }
+
+    func release(_ response: RemoteResponse) {
+        responseWaiter?.resume(returning: response)
+        responseWaiter = nil
+    }
+}
+
+private actor DelayedAutoConnectOperation {
+    private var recordedEndpoints: [NWEndpoint] = []
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private var responseWaiter:
+        CheckedContinuation<RemoteResponse, Never>?
+
+    func run(endpoint: NWEndpoint) async -> RemoteResponse {
+        recordedEndpoints.append(endpoint)
+
+        guard recordedEndpoints.count > 1 else {
+            return .failed(message: "Not connected")
+        }
+
+        startWaiters.forEach { $0.resume() }
+        startWaiters.removeAll()
+        return await withCheckedContinuation { continuation in
+            responseWaiter = continuation
+        }
+    }
+
+    func waitUntilAutoConnectRequested() async {
+        guard recordedEndpoints.count < 2 else {
+            return
+        }
+
+        await withCheckedContinuation { continuation in
+            startWaiters.append(continuation)
+        }
+    }
+
+    func endpoints() -> [NWEndpoint] {
+        recordedEndpoints
+    }
+
+    func releaseAutoConnect(_ response: RemoteResponse) {
         responseWaiter?.resume(returning: response)
         responseWaiter = nil
     }

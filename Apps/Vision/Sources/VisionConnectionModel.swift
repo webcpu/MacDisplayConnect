@@ -11,19 +11,33 @@ final class VisionConnectionModel {
     typealias DiscoverOperation =
         @Sendable () -> AsyncStream<RemoteDiscoveryEvent>
     typealias VisionProNameOperation = @MainActor () -> String
+    typealias AutoConnectEnabledOperation = @MainActor () -> Bool
     typealias ConnectOperation =
         @Sendable (RemoteRequest, NWEndpoint) async throws -> RemoteResponse
     typealias StatusOperation =
         @Sendable (NWEndpoint) async throws -> RemoteResponse
 
     private(set) var macs: [RemoteMac] = []
-    private(set) var phase = VisionConnectionPhase.searching
+    private(set) var phase = VisionConnectionPhase.searching {
+        didSet {
+            guard oldValue != phase else {
+                return
+            }
+            VisionDiagnosticLog.record(
+                "Connection phase: \(oldValue.title) -> \(phase.title)"
+            )
+        }
+    }
 
     @ObservationIgnored private let discover: DiscoverOperation
     @ObservationIgnored private let readVisionProName: VisionProNameOperation
+    @ObservationIgnored private let readAutoConnectEnabled:
+        AutoConnectEnabledOperation
     @ObservationIgnored private let sendConnect: ConnectOperation
     @ObservationIgnored private let sendStatus: StatusOperation
     @ObservationIgnored private var lastSelectedMac: RemoteMac?
+    @ObservationIgnored private var isSceneActive = false
+    @ObservationIgnored private var isAutoConnectArmed = false
     @ObservationIgnored private var statusGeneration = 0
 
     init(
@@ -33,8 +47,12 @@ final class VisionConnectionModel {
         visionProName: @escaping VisionProNameOperation = {
             UIDevice.current.name
         },
+        autoConnectEnabled: @escaping AutoConnectEnabledOperation = {
+            true
+        },
         connect: @escaping ConnectOperation = { request, endpoint in
-            try await RemoteClient().send(request, to: endpoint)
+            try await RemoteClient(timeout: .seconds(120))
+                .send(request, to: endpoint)
         },
         status: @escaping StatusOperation = { endpoint in
             try await RemoteClient().send(.status, to: endpoint)
@@ -42,6 +60,7 @@ final class VisionConnectionModel {
     ) {
         self.discover = discover
         readVisionProName = visionProName
+        readAutoConnectEnabled = autoConnectEnabled
         self.sendConnect = connect
         self.sendStatus = status
     }
@@ -56,8 +75,26 @@ final class VisionConnectionModel {
 
     func startDiscovery() async {
         for await event in discover() {
-            apply(event)
+            await apply(event)
         }
+    }
+
+    func sceneDidBecomeActive() async {
+        isSceneActive = true
+        isAutoConnectArmed = true
+        await attemptAutoConnect()
+    }
+
+    func sceneDidLeaveActive() {
+        isSceneActive = false
+        guard isAutoConnectArmed else {
+            return
+        }
+
+        isAutoConnectArmed = false
+        VisionDiagnosticLog.record(
+            "Auto-connect stopped: scene is no longer active"
+        )
     }
 
     func connect(to mac: RemoteMac) async {
@@ -122,6 +159,10 @@ final class VisionConnectionModel {
         } else {
             phase = phase.applyingUnavailableStatus()
         }
+
+        await attemptAutoConnect(
+            confirmedConnected: isConnected == true
+        )
     }
 
     func monitorStatus() async {
@@ -136,7 +177,7 @@ final class VisionConnectionModel {
         }
     }
 
-    private func apply(_ event: RemoteDiscoveryEvent) {
+    private func apply(_ event: RemoteDiscoveryEvent) async {
         switch event {
         case let .results(macs):
             let didRemoveSelectedMac = lastSelectedMac.map { selectedMac in
@@ -145,24 +186,118 @@ final class VisionConnectionModel {
             self.macs = macs
 
             if didRemoveSelectedMac {
-                lastSelectedMac = nil
                 statusGeneration += 1
-
-                if case .success = phase {
-                    phase = .statusUnavailable
-                    return
-                }
             }
 
-            guard phase.acceptsDiscoveryUpdates else {
-                return
+            if didRemoveSelectedMac, phase.isConnected {
+                phase = .statusUnavailable
+            } else if phase.acceptsDiscoveryUpdates {
+                phase = macs.isEmpty ? .searching : .ready
             }
-            phase = macs.isEmpty ? .searching : .ready
+
+            if isSceneActive {
+                isAutoConnectArmed = true
+            }
+            await attemptAutoConnect()
         case let .unavailable(message):
             if macs.isEmpty, phase.acceptsDiscoveryUpdates {
                 phase = .discoveryFailure(message)
             }
         }
+    }
+
+    private func attemptAutoConnect(
+        confirmedConnected: Bool = false
+    ) async {
+        switch autoConnectDecision(
+            isEnabled: readAutoConnectEnabled(),
+            isArmed: isAutoConnectArmed,
+            phase: phase,
+            preferredMac: lastSelectedMac,
+            discoveredMacs: macs
+        ) {
+        case .noAction:
+            return
+        case .disabled:
+            isAutoConnectArmed = false
+            VisionDiagnosticLog.record("Auto-connect disabled")
+        case .waitForPreferredMac:
+            VisionDiagnosticLog.record(
+                "Auto-connect waiting for preferred Mac discovery"
+            )
+        case .alreadyConnected:
+            if confirmedConnected {
+                isAutoConnectArmed = false
+                VisionDiagnosticLog.record(
+                    "Auto-connect skipped: connection confirmed"
+                )
+            } else {
+                VisionDiagnosticLog.record(
+                    "Auto-connect waiting for refreshed status"
+                )
+            }
+        case .connectionInProgress:
+            isAutoConnectArmed = false
+            VisionDiagnosticLog.record(
+                "Auto-connect skipped: connection already in progress"
+            )
+        case let .connect(mac):
+            isAutoConnectArmed = false
+            VisionDiagnosticLog.record(
+                "Auto-connect attempting \(mac.name)"
+            )
+            await connect(to: mac)
+            isAutoConnectArmed = isSceneActive
+                && readAutoConnectEnabled()
+                && !phase.isConnected
+            let nextStep = isAutoConnectArmed
+                ? "; waiting for discovery update"
+                : ""
+            VisionDiagnosticLog.record(
+                "Auto-connect outcome: \(phase.title)\(nextStep)"
+            )
+        }
+    }
+}
+
+enum AutoConnectDecision: Equatable {
+    case noAction
+    case disabled
+    case waitForPreferredMac
+    case alreadyConnected
+    case connectionInProgress
+    case connect(RemoteMac)
+}
+
+func autoConnectDecision(
+    isEnabled: Bool,
+    isArmed: Bool,
+    phase: VisionConnectionPhase,
+    preferredMac: RemoteMac?,
+    discoveredMacs: [RemoteMac]
+) -> AutoConnectDecision {
+    guard isArmed else {
+        return .noAction
+    }
+
+    guard isEnabled else {
+        return .disabled
+    }
+
+    switch phase {
+    case .success:
+        return .alreadyConnected
+    case .connecting:
+        return .connectionInProgress
+    default:
+        return preferredMac
+            .flatMap { preferredMac in
+                discoveredMacs.first {
+                    $0.endpoint == preferredMac.endpoint
+                }
+            }
+            .map(AutoConnectDecision.connect)
+            ?? .waitForPreferredMac
     }
 }
 
@@ -268,6 +403,14 @@ enum VisionConnectionPhase: Equatable {
             "Try Again"
         case .searching, .connecting, .success, .discoveryFailure:
             nil
+        }
+    }
+
+    var isConnected: Bool {
+        if case .success = self {
+            true
+        } else {
+            false
         }
     }
 

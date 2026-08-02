@@ -302,6 +302,49 @@ struct ControlCenterRetryTests {
         #expect(script.waitCount == 1)
     }
 
+    @Test("connection waits for delayed requested Vision Pro readiness")
+    func connectionWaitsForDelayedRequestedVisionProReadiness() async throws {
+        let waitingForDevice = [
+            element(
+                index: 3,
+                identifier: "screen-mirroring-header",
+                text: ["Screen Mirroring"]
+            ),
+        ]
+        let script = ControlCenterScript(
+            scans: [
+                waitingForDevice,
+                waitingForDevice,
+                waitingForDevice,
+                waitingForDevice,
+                [
+                    element(
+                        index: 9,
+                        kind: .checkbox,
+                        identifier: "screen-mirroring-device-Sidecar:AVP",
+                        text: ["S’s Apple Vision Pro"],
+                        isSelected: false
+                    ),
+                ],
+            ]
+        )
+
+        let didConnect = try await ControlCenter.connectMacVirtualDisplay(
+            visionProName: "S’s Apple Vision Pro",
+            using: script.automation(
+                maximumAttempts: 3,
+                connectionReadinessAttempts: 5
+            )
+        )
+
+        #expect(didConnect)
+        #expect(script.scanCount == 5)
+        #expect(
+            script.presses == [.init(scanIndex: 4, elementIndex: 9)]
+        )
+        #expect(script.waitCount == 4)
+    }
+
     @Test("connection does not toggle an unchanged AirPlay row twice")
     func connectionDoesNotRepeatAirPlayRowAction() async throws {
         let targetID = "screen-mirroring-device-AirPlay:AVP"
@@ -626,6 +669,44 @@ struct ControlCenterRetryTests {
         }
     }
 
+    @Test("an unrelated AX window does not suppress reopening Control Center")
+    func unrelatedWindowDoesNotSuppressControlCenterReopen() async throws {
+        let script = ControlCenterScript(
+            scans: [
+                [
+                    element(index: 0, text: ["Unrelated window"]),
+                    element(
+                        index: 4,
+                        identifier: "com.apple.menuextra.controlcenter",
+                        text: ["Control Center"]
+                    ),
+                ],
+                [
+                    element(
+                        index: 8,
+                        kind: .checkbox,
+                        identifier: "controlcenter-screen-mirroring",
+                        text: ["Screen Mirroring"]
+                    ),
+                ],
+            ],
+            windowElementIndices: [[0], []]
+        )
+
+        try await ControlCenter.openScreenMirroring(
+            using: script.automation(maximumAttempts: 1)
+        )
+
+        #expect(
+            script.presses
+                == [
+                    .init(scanIndex: 0, elementIndex: 4),
+                    .init(scanIndex: 1, elementIndex: 8),
+                ]
+        )
+        #expect(script.waitCount == 1)
+    }
+
     @Test("permanently absent Vision Pro fails after bounded retries")
     func permanentlyAbsentVisionProFailsAfterBoundedRetries() async {
         let script = ControlCenterScript(scans: [[], [], []])
@@ -649,6 +730,7 @@ struct ControlCenterRetryTests {
 @MainActor
 private final class ControlCenterScript {
     private let scans: [[ControlCenterElement]]
+    private let windowElementIndices: [Set<Int>]
     private var nextScanIndex = 0
 
     private(set) var presses: [ControlCenterPress] = []
@@ -659,13 +741,21 @@ private final class ControlCenterScript {
         nextScanIndex
     }
 
-    init(scans: [[ControlCenterElement]]) {
+    init(
+        scans: [[ControlCenterElement]],
+        windowElementIndices: [[Int]] = []
+    ) {
         self.scans = scans
+        self.windowElementIndices = windowElementIndices.map(Set.init)
     }
 
-    func automation(maximumAttempts: Int) -> ControlCenterAutomation {
+    func automation(
+        maximumAttempts: Int,
+        connectionReadinessAttempts: Int? = nil
+    ) -> ControlCenterAutomation {
         ControlCenterAutomation(
             maximumAttempts: maximumAttempts,
+            connectionReadinessAttempts: connectionReadinessAttempts,
             scan: { [self] in
                 try nextScan()
             },
@@ -682,11 +772,14 @@ private final class ControlCenterScript {
 
         let scanIndex = nextScanIndex
         let snapshots = scans[nextScanIndex]
+        let windows = windowElementIndices.indices.contains(nextScanIndex)
+            ? windowElementIndices[nextScanIndex]
+            : []
         nextScanIndex += 1
 
         return ControlCenterScan(
             snapshots: snapshots,
-            isWindow: { _ in false },
+            isWindow: { windows.contains($0) },
             press: { [self] index in
                 presses.append(
                     ControlCenterPress(

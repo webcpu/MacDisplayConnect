@@ -130,12 +130,13 @@ enum ControlCenter {
         visionProName: String? = nil,
         using automation: ControlCenterAutomation
     ) async throws -> Bool {
-        guard automation.maximumAttempts > 0 else {
+        let maximumAttempts = automation.connectionReadinessAttempts
+        guard maximumAttempts > 0 else {
             throw MacDisplayConnectError.visionProControlNotFound
         }
 
         var didActivateExpandableVisionPro = false
-        for attempt in 1...automation.maximumAttempts {
+        for attempt in 1...maximumAttempts {
             let scan = try automation.scan()
             let action = ControlCenterPlanner.action(
                 for: scan.snapshots,
@@ -163,10 +164,10 @@ enum ControlCenter {
             case .alreadyConnected:
                 return false
             case .visionProNotFound:
-                if attempt < automation.maximumAttempts {
+                if attempt < maximumAttempts {
                     try recoverScreenMirroringIfNeeded(from: scan)
                 }
-                if attempt == automation.maximumAttempts {
+                if attempt == maximumAttempts {
                     DiagnosticLog.record(
                         "Vision Pro scan details: "
                             + scan.snapshots.diagnosticDetails
@@ -174,7 +175,7 @@ enum ControlCenter {
                 }
             }
 
-            if attempt < automation.maximumAttempts {
+            if attempt < maximumAttempts {
                 try await automation.wait()
             }
         }
@@ -252,13 +253,6 @@ enum ControlCenter {
         elementIndex: Int,
         in scan: ControlCenterScan
     ) throws -> Bool {
-        let containsWindow = scan.snapshots.indices.contains {
-            scan.isWindow($0)
-        }
-        guard !containsWindow else {
-            return false
-        }
-
         DiagnosticLog.record(
             "Reopening Control Center because its panel is not visible"
         )
@@ -313,6 +307,8 @@ enum ControlCenter {
     ) -> ControlCenterAutomation {
         ControlCenterAutomation(
             maximumAttempts: ControlCenterTiming.actionAttempts,
+            connectionReadinessAttempts:
+                ControlCenterTiming.connectionReadinessAttempts,
             scan: {
                 let elements = accessibilityTree(from: application)
                 return ControlCenterScan(
@@ -656,8 +652,22 @@ enum ControlCenterDeviceActionGeometry {
 @MainActor
 struct ControlCenterAutomation {
     let maximumAttempts: Int
+    let connectionReadinessAttempts: Int
     let scan: () throws -> ControlCenterScan
     let wait: () async throws -> Void
+
+    init(
+        maximumAttempts: Int,
+        connectionReadinessAttempts: Int? = nil,
+        scan: @escaping () throws -> ControlCenterScan,
+        wait: @escaping () async throws -> Void
+    ) {
+        self.maximumAttempts = maximumAttempts
+        self.connectionReadinessAttempts =
+            connectionReadinessAttempts ?? maximumAttempts
+        self.scan = scan
+        self.wait = wait
+    }
 }
 
 @MainActor
@@ -670,6 +680,7 @@ struct ControlCenterScan {
 
 private enum ControlCenterTiming {
     static let actionAttempts = 3
+    static let connectionReadinessAttempts = 180
     static let actionDelay = Duration.milliseconds(500)
 }
 
