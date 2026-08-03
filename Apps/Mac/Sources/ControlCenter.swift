@@ -183,6 +183,58 @@ enum ControlCenter {
         throw MacDisplayConnectError.visionProControlNotFound
     }
 
+    static func dismissScreenMirroringIfStillOpen() async {
+        do {
+            let application = try controlCenterApplication()
+            await dismissScreenMirroringIfStillOpen(
+                using: automation(for: application)
+            )
+        } catch {
+            DiagnosticLog.record(
+                "Could not inspect Screen Mirroring after connection: "
+                    + error.localizedDescription
+            )
+        }
+    }
+
+    static func dismissScreenMirroringIfStillOpen(
+        using automation: ControlCenterAutomation
+    ) async {
+        do {
+            try await automation.wait()
+            let scan = try automation.scan()
+            let isPopoverOpen = scan.snapshots.contains { element in
+                switch element.identifier {
+                case "screen-mirroring-header",
+                     "controlcenter-screen-mirroring":
+                    true
+                case "com.apple.menuextra.screen-mirroring":
+                    scan.isWindow(element.index)
+                default:
+                    false
+                }
+            }
+            DiagnosticLog.record(
+                "Post-connection Screen Mirroring scan: "
+                    + "\(scan.snapshots.diagnosticSummary); "
+                    + "popoverOpen=\(isPopoverOpen)"
+            )
+
+            guard isPopoverOpen else {
+                DiagnosticLog.record("Screen Mirroring closed naturally")
+                return
+            }
+
+            try scan.dismissControlCenter()
+            DiagnosticLog.record("Dismissed Screen Mirroring after connection")
+        } catch {
+            DiagnosticLog.record(
+                "Could not dismiss Screen Mirroring after connection: "
+                    + error.localizedDescription
+            )
+        }
+    }
+
     static func disconnectMacVirtualDisplay(
         visionProName: String? = nil
     ) async throws -> Bool {
@@ -320,6 +372,9 @@ enum ControlCenter {
                     press: { index in
                         try press(elements, at: index)
                     },
+                    dismissControlCenter: {
+                        try dismissControlCenterPopover(elements)
+                    },
                     activateDevicePrimaryAction: { index in
                         try activateDevicePrimaryAction(
                             elements,
@@ -380,6 +435,57 @@ enum ControlCenter {
         else {
             throw MacDisplayConnectError.visionProControlNotFound
         }
+    }
+
+    private static func dismissControlCenterPopover(
+        _ elements: [AXUIElement]
+    ) throws {
+        let controlCenterMenuItems = elements.filter {
+            $0.role == kAXMenuBarItemRole
+                && $0.identifier == "com.apple.menuextra.controlcenter"
+        }
+        let pinnedScreenMirroringItems = elements.filter {
+            $0.role == kAXMenuBarItemRole
+                && $0.identifier == "com.apple.menuextra.screen-mirroring"
+        }
+        let menuItem: AXUIElement?
+        if controlCenterMenuItems.count == 1 {
+            menuItem = controlCenterMenuItems[0]
+        } else if controlCenterMenuItems.isEmpty,
+                  pinnedScreenMirroringItems.count == 1
+        {
+            menuItem = pinnedScreenMirroringItems[0]
+        } else {
+            menuItem = nil
+        }
+
+        guard let menuItem,
+              let menuItemFrame = menuItem.frame,
+              menuItemFrame.width > 0,
+              menuItemFrame.height > 0,
+              let eventSource = CGEventSource(stateID: .combinedSessionState)
+        else {
+            throw MacDisplayConnectError.visionProControlNotFound
+        }
+
+        let previousMouseLocation = CGEvent(source: eventSource)?.location
+        defer {
+            if let previousMouseLocation,
+               let restore = CGEvent(
+                   mouseEventSource: eventSource,
+                   mouseType: .mouseMoved,
+                   mouseCursorPosition: previousMouseLocation,
+                   mouseButton: .left
+               )
+            {
+                restore.post(tap: .cghidEventTap)
+            }
+        }
+
+        try postMouseClick(
+            at: CGPoint(x: menuItemFrame.midX, y: menuItemFrame.midY),
+            source: eventSource
+        )
     }
 
     private static func activateDevicePrimaryAction(
@@ -675,6 +781,7 @@ struct ControlCenterScan {
     let snapshots: [ControlCenterElement]
     let isWindow: (Int) -> Bool
     let press: (Int) throws -> Void
+    let dismissControlCenter: () throws -> Void
     let activateDevicePrimaryAction: (Int) throws -> Void
 }
 

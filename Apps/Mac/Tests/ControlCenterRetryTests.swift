@@ -707,6 +707,94 @@ struct ControlCenterRetryTests {
         #expect(script.waitCount == 1)
     }
 
+    @Test("connection cleanup leaves a naturally closed popover untouched")
+    func connectionCleanupLeavesClosedPopoverUntouched() async {
+        let script = ControlCenterScript(
+            scans: [
+                [
+                    element(
+                        index: 4,
+                        identifier: "com.apple.menuextra.controlcenter",
+                        text: ["Control Center"]
+                    ),
+                    element(
+                        index: 5,
+                        identifier: "com.apple.menuextra.screen-mirroring",
+                        text: ["Screen Mirroring"]
+                    ),
+                ],
+            ]
+        )
+
+        await ControlCenter.dismissScreenMirroringIfStillOpen(
+            using: script.automation(maximumAttempts: 1)
+        )
+
+        #expect(script.waitCount == 1)
+        #expect(script.scanCount == 1)
+        #expect(script.presses.isEmpty)
+        #expect(script.controlCenterDismissalCount == 0)
+    }
+
+    @Test("connection cleanup dismisses a popover still open after its grace period")
+    func connectionCleanupDismissesOpenPopover() async {
+        let script = ControlCenterScript(
+            scans: [
+                [
+                    element(
+                        index: 3,
+                        identifier: "screen-mirroring-header",
+                        text: ["Screen Mirroring"]
+                    ),
+                    element(
+                        index: 4,
+                        identifier: "com.apple.menuextra.controlcenter",
+                        text: ["Control Center"]
+                    ),
+                ],
+            ]
+        )
+
+        await ControlCenter.dismissScreenMirroringIfStillOpen(
+            using: script.automation(maximumAttempts: 1)
+        )
+
+        #expect(script.waitCount == 1)
+        #expect(script.scanCount == 1)
+        #expect(script.presses.isEmpty)
+        #expect(script.controlCenterDismissalCount == 1)
+    }
+
+    @Test("connection cleanup dismisses the Control Center main popover")
+    func connectionCleanupDismissesOpenControlCenter() async {
+        let script = ControlCenterScript(
+            scans: [
+                [
+                    element(
+                        index: 4,
+                        identifier: "com.apple.menuextra.controlcenter",
+                        text: ["Control Center"]
+                    ),
+                    element(
+                        index: 8,
+                        kind: .checkbox,
+                        identifier: "controlcenter-screen-mirroring",
+                        text: ["Screen Mirroring"]
+                    ),
+                ],
+            ]
+        )
+
+        await ControlCenter.dismissScreenMirroringIfStillOpen(
+            using: script.automation(maximumAttempts: 1)
+        )
+
+        #expect(script.waitCount == 1)
+        #expect(script.scanCount == 1)
+        #expect(script.presses.isEmpty)
+        #expect(script.controlCenterDismissalCount == 1)
+    }
+
     @Test("permanently absent Vision Pro fails after bounded retries")
     func permanentlyAbsentVisionProFailsAfterBoundedRetries() async {
         let script = ControlCenterScript(scans: [[], [], []])
@@ -735,6 +823,7 @@ private final class ControlCenterScript {
 
     private(set) var presses: [ControlCenterPress] = []
     private(set) var devicePrimaryActions: [ControlCenterPress] = []
+    private(set) var controlCenterDismissalCount = 0
     private(set) var waitCount = 0
 
     var scanCount: Int {
@@ -787,6 +876,9 @@ private final class ControlCenterScript {
                         elementIndex: index
                     )
                 )
+            },
+            dismissControlCenter: { [self] in
+                controlCenterDismissalCount += 1
             },
             activateDevicePrimaryAction: { [self] index in
                 devicePrimaryActions.append(

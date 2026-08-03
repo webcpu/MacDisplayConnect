@@ -43,6 +43,7 @@ struct ConnectionController {
             DiagnosticLog.record(
                 "Display became active while Control Center was updating"
             )
+            await ControlCenter.dismissScreenMirroringIfStillOpen()
             return .changed
         }
 
@@ -58,6 +59,8 @@ struct ConnectionController {
         guard isConnected else {
             throw MacDisplayConnectError.connectionNotConfirmed
         }
+
+        await ControlCenter.dismissScreenMirroringIfStillOpen()
 
         return didConnect ? .changed : .unchanged
     }
