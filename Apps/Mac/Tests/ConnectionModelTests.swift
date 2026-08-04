@@ -174,7 +174,10 @@ struct ConnectionModelTests {
 
         let response = await model.handleRemoteRequest(.status)
 
-        #expect(response == .status(isConnected: true))
+        #expect(
+            response
+                == .status(isConnected: true, isAvailable: true)
+        )
         #expect(
             model.phase
                 == .success("Mac Virtual Display is connected.")
@@ -193,8 +196,85 @@ struct ConnectionModelTests {
 
         let response = await model.handleRemoteRequest(.status)
 
-        #expect(response == .status(isConnected: false))
+        #expect(
+            response
+                == .status(isConnected: false, isAvailable: true)
+        )
         #expect(model.phase == .ready)
+    }
+
+    @Test("a locked Mac reports unavailable and rejects remote connections")
+    func lockedMacIsUnavailableForRemoteConnections() async {
+        var didActivate = false
+        var didConnect = false
+        let model = makeConnectionModel(
+            connect: { _ in
+                didConnect = true
+                return "Mac Virtual Display is connected."
+            },
+            activateForRemoteConnection: {
+                didActivate = true
+                return true
+            }
+        )
+        model.setConnectionAvailable(false)
+
+        let statusResponse = await model.handleRemoteRequest(.status)
+        let connectResponse = await model.handleRemoteConnect()
+
+        #expect(
+            statusResponse
+                == .status(isConnected: false, isAvailable: false)
+        )
+        #expect(
+            connectResponse
+                == .failed(message: "Unlock the Mac before connecting.")
+        )
+        #expect(!didActivate)
+        #expect(!didConnect)
+    }
+
+    @Test("locking during activation prevents the remote connection")
+    func lockDuringActivationPreventsRemoteConnection() async {
+        var didConnect = false
+        let activation = SuspendedActivationOperation()
+        let model = makeConnectionModel(
+            connect: { _ in
+                didConnect = true
+                return "Mac Virtual Display is connected."
+            },
+            activateForRemoteConnection: {
+                await activation.run()
+            }
+        )
+        let request = Task { @MainActor in
+            await model.handleRemoteConnect()
+        }
+        await activation.waitUntilStarted()
+
+        model.setConnectionAvailable(false)
+        await activation.release(true)
+        let response = await request.value
+
+        #expect(
+            response
+                == .failed(message: "Unlock the Mac before connecting.")
+        )
+        #expect(!didConnect)
+    }
+
+    @Test("an unlocked Mac reports available again")
+    func unlockedMacBecomesAvailableAgain() async {
+        let model = makeConnectionModel()
+        model.setConnectionAvailable(false)
+        model.setConnectionAvailable(true)
+
+        let response = await model.handleRemoteRequest(.status)
+
+        #expect(
+            response
+                == .status(isConnected: false, isAvailable: true)
+        )
     }
 
     @Test("a second request is busy while the first operation is suspended")
@@ -216,7 +296,10 @@ struct ConnectionModelTests {
         let secondResponse = await model.connectAndExtend()
         let invocationCountWhileBusy = await operation.invocationCount
 
-        #expect(statusResponse == .status(isConnected: false))
+        #expect(
+            statusResponse
+                == .status(isConnected: false, isAvailable: true)
+        )
         #expect(model.phase == .working)
         #expect(secondResponse == .busy)
         #expect(invocationCountWhileBusy == 1)
@@ -432,15 +515,18 @@ private func makeConnectionModel(
         @escaping ConnectionModel.ActivationOperation = { true },
     connectionStatus:
         @escaping ConnectionModel.ConnectionStatusOperation = { false },
-    hasAccessibilityAccess: @escaping @MainActor () -> Bool = { true }
+    hasAccessibilityAccess: @escaping @MainActor () -> Bool = { true },
+    isConnectionAvailable: Bool = true
 ) -> ConnectionModel {
-    ConnectionModel(
+    let model = ConnectionModel(
         connect: connect,
         activateForRemoteConnection: activateForRemoteConnection,
         connectionStatus: connectionStatus,
         hasAccessibilityAccess: hasAccessibilityAccess,
         initialLocalNetworkAccess: .granted
     )
+    model.setConnectionAvailable(isConnectionAvailable)
+    return model
 }
 
 private struct TestConnectionError: LocalizedError {
@@ -494,6 +580,37 @@ private func waitUntil(_ condition: () -> Bool) async {
             return
         }
         await Task.yield()
+    }
+}
+
+private actor SuspendedActivationOperation {
+    private var didStart = false
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private var responseWaiter: CheckedContinuation<Bool, Never>?
+
+    func run() async -> Bool {
+        didStart = true
+        startWaiters.forEach { $0.resume() }
+        startWaiters.removeAll()
+
+        return await withCheckedContinuation { continuation in
+            responseWaiter = continuation
+        }
+    }
+
+    func waitUntilStarted() async {
+        guard !didStart else {
+            return
+        }
+
+        await withCheckedContinuation { continuation in
+            startWaiters.append(continuation)
+        }
+    }
+
+    func release(_ response: Bool) {
+        responseWaiter?.resume(returning: response)
+        responseWaiter = nil
     }
 }
 

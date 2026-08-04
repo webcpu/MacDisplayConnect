@@ -9,7 +9,7 @@ public enum RemoteResponse: Equatable, Sendable {
     case succeeded(message: String)
     case busy
     case failed(message: String)
-    case status(isConnected: Bool)
+    case status(isConnected: Bool, isAvailable: Bool)
 }
 
 public enum RemoteProtocolError: Error, Equatable, Sendable {
@@ -131,17 +131,20 @@ private struct ResponsePayload: Codable {
     let status: String
     let message: String?
     let isConnected: Bool?
+    let isAvailable: Bool?
 
     private init(
         version: Int,
         status: String,
         message: String?,
-        isConnected: Bool? = nil
+        isConnected: Bool? = nil,
+        isAvailable: Bool? = nil
     ) {
         self.version = version
         self.status = status
         self.message = message
         self.isConnected = isConnected
+        self.isAvailable = isAvailable
     }
 
     init(_ response: RemoteResponse) {
@@ -164,12 +167,13 @@ private struct ResponsePayload: Codable {
                 status: "failed",
                 message: message
             )
-        case .status(let isConnected):
+        case let .status(isConnected, isAvailable):
             self.init(
                 version: RemoteProtocol.version,
                 status: "status",
                 message: nil,
-                isConnected: isConnected
+                isConnected: isConnected,
+                isAvailable: isAvailable
             )
         }
     }
@@ -193,7 +197,10 @@ private struct ResponsePayload: Codable {
                 guard let isConnected else {
                     throw RemoteProtocolError.malformedFrame
                 }
-                return .status(isConnected: isConnected)
+                return .status(
+                    isConnected: isConnected,
+                    isAvailable: isAvailable ?? false
+                )
             default:
                 throw RemoteProtocolError.unknownStatus(status)
             }

@@ -77,6 +77,9 @@ struct VisionConnectionModelTests {
             connect: { _, endpoint in
                 await endpoints.record(endpoint)
                 return .failed(message: "Not connected")
+            },
+            status: { _ in
+                .status(isConnected: false, isAvailable: true)
             }
         )
 
@@ -88,14 +91,54 @@ struct VisionConnectionModelTests {
         #expect(model.phase == .failure("Not connected"))
     }
 
-    @Test("waits for the preferred Mac and retries only on discovery updates")
-    func waitsForPreferredMacAndDiscoveryUpdates() async {
-        let preferredMac = makeMac(name: "Studio Mac")
-        let otherMac = makeMac(name: "Other Mac")
+    @Test("waits while unavailable then reconnects once when available")
+    func availabilityGatesOneAutomaticReconnect() async {
+        let mac = makeMac(name: "Studio Mac")
         let events = AsyncStream<RemoteDiscoveryEvent> { continuation in
-            continuation.yield(.results([otherMac]))
-            continuation.yield(.results([otherMac, preferredMac]))
-            continuation.yield(.results([preferredMac, otherMac]))
+            continuation.yield(.results([mac]))
+            continuation.finish()
+        }
+        let endpoints = EndpointProbe()
+        let status = QueuedStatusOperation(
+            responses: [
+                .status(isConnected: false, isAvailable: false),
+                .status(isConnected: false, isAvailable: false),
+                .status(isConnected: false, isAvailable: true),
+                .status(isConnected: false, isAvailable: true),
+            ]
+        )
+        let model = VisionConnectionModel(
+            discover: { events },
+            connect: { _, endpoint in
+                await endpoints.record(endpoint)
+                return .failed(message: "Not connected")
+            },
+            status: { endpoint in
+                await status.run(endpoint: endpoint)
+            }
+        )
+        await model.startDiscovery()
+        await model.connect(to: mac)
+
+        await model.sceneDidBecomeActive()
+        await model.refreshStatus()
+        #expect(await endpoints.values() == [mac.endpoint])
+
+        await model.refreshStatus()
+        await model.refreshStatus()
+
+        #expect(
+            await endpoints.values()
+                == [mac.endpoint, mac.endpoint]
+        )
+        #expect(await status.endpoints().count == 4)
+    }
+
+    @Test("does not auto-connect when Mac status is unavailable")
+    func unavailableStatusDoesNotAutoConnect() async {
+        let mac = makeMac(name: "Studio Mac")
+        let events = AsyncStream<RemoteDiscoveryEvent> { continuation in
+            continuation.yield(.results([mac]))
             continuation.finish()
         }
         let endpoints = EndpointProbe()
@@ -104,6 +147,72 @@ struct VisionConnectionModelTests {
             connect: { _, endpoint in
                 await endpoints.record(endpoint)
                 return .failed(message: "Not connected")
+            },
+            status: { _ in throw TestError.unreachable }
+        )
+        await model.startDiscovery()
+        await model.connect(to: mac)
+
+        await model.sceneDidBecomeActive()
+        await model.refreshStatus()
+        await model.refreshStatus()
+
+        #expect(await endpoints.values() == [mac.endpoint])
+    }
+
+    @Test("ignores availability received after the scene becomes inactive")
+    func ignoresAvailabilityAfterSceneBecomesInactive() async {
+        let mac = makeMac(name: "Studio Mac")
+        let events = AsyncStream<RemoteDiscoveryEvent> { continuation in
+            continuation.yield(.results([mac]))
+            continuation.finish()
+        }
+        let endpoints = EndpointProbe()
+        let status = SuspendedStatusOperation()
+        let model = VisionConnectionModel(
+            discover: { events },
+            connect: { _, endpoint in
+                await endpoints.record(endpoint)
+                return .failed(message: "Not connected")
+            },
+            status: { _ in await status.run() }
+        )
+        await model.startDiscovery()
+        await model.connect(to: mac)
+        let activation = Task { @MainActor in
+            await model.sceneDidBecomeActive()
+        }
+        await status.waitUntilRequested()
+
+        model.sceneDidLeaveActive()
+        await status.release(
+            .status(isConnected: false, isAvailable: true)
+        )
+        await activation.value
+
+        #expect(await endpoints.values() == [mac.endpoint])
+    }
+
+    @Test("waits for the preferred Mac without retrying a failed connection")
+    func waitsForPreferredMacWithoutRetrying() async {
+        let preferredMac = makeMac(name: "Studio Mac")
+        let otherMac = makeMac(name: "Other Mac")
+        let events = AsyncStream<RemoteDiscoveryEvent> { continuation in
+            continuation.yield(.results([otherMac]))
+            continuation.yield(.results([otherMac, preferredMac]))
+            continuation.yield(.results([]))
+            continuation.yield(.results([preferredMac]))
+            continuation.finish()
+        }
+        let endpoints = EndpointProbe()
+        let model = VisionConnectionModel(
+            discover: { events },
+            connect: { _, endpoint in
+                await endpoints.record(endpoint)
+                return .failed(message: "Not connected")
+            },
+            status: { _ in
+                .status(isConnected: false, isAvailable: true)
             }
         )
 
@@ -114,7 +223,6 @@ struct VisionConnectionModelTests {
         #expect(
             await endpoints.values()
                 == [
-                    preferredMac.endpoint,
                     preferredMac.endpoint,
                     preferredMac.endpoint,
                 ]
@@ -177,6 +285,9 @@ struct VisionConnectionModelTests {
             connect: { _, endpoint in
                 await endpoints.record(endpoint)
                 return .failed(message: "Not connected")
+            },
+            status: { _ in
+                .status(isConnected: false, isAvailable: true)
             }
         )
         await model.startDiscovery()
@@ -203,6 +314,9 @@ struct VisionConnectionModelTests {
             connect: { _, endpoint in
                 await endpoints.record(endpoint)
                 return .failed(message: "Not connected")
+            },
+            status: { _ in
+                .status(isConnected: false, isAvailable: true)
             }
         )
         await model.connect(to: mac)
@@ -234,8 +348,8 @@ struct VisionConnectionModelTests {
         #expect(model.phase == .success("Connected"))
     }
 
-    @Test("re-enabling waits for a later automatic opportunity")
-    func reenablingWaitsForFutureDiscovery() async {
+    @Test("re-enabling waits for a later active session")
+    func reenablingWaitsForFutureActivation() async {
         let mac = makeMac(name: "Studio Mac")
         let (events, continuation) =
             AsyncStream<RemoteDiscoveryEvent>.makeStream()
@@ -247,6 +361,9 @@ struct VisionConnectionModelTests {
             connect: { _, endpoint in
                 await endpoints.record(endpoint)
                 return .failed(message: "Not connected")
+            },
+            status: { _ in
+                .status(isConnected: false, isAvailable: true)
             }
         )
         await model.connect(to: mac)
@@ -261,6 +378,11 @@ struct VisionConnectionModelTests {
         continuation.yield(.results([mac]))
         continuation.finish()
         await discovery.value
+
+        #expect(await endpoints.values() == [mac.endpoint])
+
+        model.sceneDidLeaveActive()
+        await model.sceneDidBecomeActive()
 
         #expect(await endpoints.values() == [mac.endpoint, mac.endpoint])
     }
@@ -280,7 +402,9 @@ struct VisionConnectionModelTests {
             connect: { _, endpoint in
                 await connection.run(endpoint: endpoint)
             },
-            status: { _ in .status(isConnected: false) }
+            status: { _ in
+                .status(isConnected: false, isAvailable: true)
+            }
         )
         await model.startDiscovery()
         await model.connect(to: mac)
@@ -313,7 +437,9 @@ struct VisionConnectionModelTests {
                 await endpoints.record(endpoint)
                 return .succeeded(message: "Connected")
             },
-            status: { _ in .status(isConnected: true) }
+            status: { _ in
+                .status(isConnected: true, isAvailable: true)
+            }
         )
 
         await model.connect(to: mac)
@@ -327,7 +453,7 @@ struct VisionConnectionModelTests {
         )
     }
 
-    @Test("reconnects when status corrects stale connected state after activation")
+    @Test("reconnects when activation status reports ready and available")
     func reconnectsAfterActiveStatusRefresh() async {
         let mac = makeMac(name: "Studio Mac")
         let events = AsyncStream<RemoteDiscoveryEvent> { continuation in
@@ -341,13 +467,14 @@ struct VisionConnectionModelTests {
                 await endpoints.record(endpoint)
                 return .succeeded(message: "Connected")
             },
-            status: { _ in .status(isConnected: false) }
+            status: { _ in
+                .status(isConnected: false, isAvailable: true)
+            }
         )
         await model.startDiscovery()
         await model.connect(to: mac)
 
         await model.sceneDidBecomeActive()
-        await model.refreshStatus()
 
         #expect(await endpoints.values() == [mac.endpoint, mac.endpoint])
         #expect(model.phase == .success("Connected"))
@@ -479,7 +606,9 @@ struct VisionConnectionModelTests {
             connect: { _, _ in
                 .succeeded(message: "Mac Virtual Display is extended.")
             },
-            status: { _ in .status(isConnected: false) }
+            status: { _ in
+                .status(isConnected: false, isAvailable: true)
+            }
         )
 
         await model.connect(to: mac)
@@ -500,7 +629,9 @@ struct VisionConnectionModelTests {
             connect: { _, _ in
                 .succeeded(message: "Mac Virtual Display is extended.")
             },
-            status: { _ in .status(isConnected: false) }
+            status: { _ in
+                .status(isConnected: false, isAvailable: true)
+            }
         )
 
         await model.startDiscovery()
@@ -544,7 +675,9 @@ struct VisionConnectionModelTests {
         await status.waitUntilRequested()
 
         await model.connect(to: mac)
-        await status.release(.status(isConnected: false))
+        await status.release(
+            .status(isConnected: false, isAvailable: true)
+        )
         await refresh.value
 
         #expect(
@@ -634,7 +767,7 @@ struct VisionConnectionModelTests {
             connect: { _, _ in .busy },
             status: { endpoint in
                 await endpoints.record(endpoint)
-                return .status(isConnected: true)
+                return .status(isConnected: true, isAvailable: true)
             }
         )
 
@@ -694,6 +827,27 @@ private final class AutoConnectEnabledProbe {
 
     init(_ value: Bool) {
         self.value = value
+    }
+}
+
+private actor QueuedStatusOperation {
+    private var responses: [RemoteResponse]
+    private var recordedEndpoints: [NWEndpoint] = []
+
+    init(responses: [RemoteResponse]) {
+        self.responses = responses
+    }
+
+    func run(endpoint: NWEndpoint) -> RemoteResponse {
+        recordedEndpoints.append(endpoint)
+        if responses.count > 1 {
+            return responses.removeFirst()
+        }
+        return responses[0]
+    }
+
+    func endpoints() -> [NWEndpoint] {
+        recordedEndpoints
     }
 }
 

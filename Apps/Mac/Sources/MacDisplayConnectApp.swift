@@ -110,8 +110,13 @@ final class MacDisplayConnectApplicationDelegate:
     private weak var model: ConnectionModel?
     private var permissionMonitoringTask: Task<Void, Never>?
     private var systemTestTask: Task<Void, Never>?
+    private var screenStateDiagnosticObservers: [NSObjectProtocol] = []
+    private var isConnectionAvailable = false
+    private var hasObservedScreenState = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        startScreenStateDiagnostics()
+
         do {
             guard let configuration = try SystemTestConfiguration.parse(
                 arguments: CommandLine.arguments
@@ -135,6 +140,7 @@ final class MacDisplayConnectApplicationDelegate:
         launchError: String?
     ) {
         self.model = model
+        model.setConnectionAvailable(isConnectionAvailable)
 
         if let launchError {
             writeToStandardError(
@@ -201,14 +207,63 @@ final class MacDisplayConnectApplicationDelegate:
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
+        if !hasObservedScreenState {
+            updateConnectionAvailability(true)
+        }
         model?.refreshAccessibilityPermission()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        let notificationCenter = DistributedNotificationCenter.default()
+        screenStateDiagnosticObservers.forEach {
+            notificationCenter.removeObserver($0)
+        }
+        screenStateDiagnosticObservers = []
         permissionMonitoringTask?.cancel()
         permissionMonitoringTask = nil
         systemTestTask?.cancel()
         systemTestTask = nil
+    }
+
+    private func startScreenStateDiagnostics() {
+        guard screenStateDiagnosticObservers.isEmpty else {
+            return
+        }
+
+        let notificationCenter = DistributedNotificationCenter.default()
+        let notificationNames = [
+            Notification.Name("com.apple.screenIsLocked"),
+            Notification.Name("com.apple.screenIsUnlocked"),
+        ]
+
+        screenStateDiagnosticObservers = notificationNames.map { name in
+            notificationCenter.addObserver(
+                forName: name,
+                object: nil,
+                queue: .main
+            ) { [weak self] notification in
+                let name = notification.name.rawValue
+                let isAvailable = name == "com.apple.screenIsUnlocked"
+                MainActor.assumeIsolated {
+                    DiagnosticLog.record(
+                        "Screen state distributed notification received: "
+                            + name
+                    )
+                    self?.hasObservedScreenState = true
+                    self?.updateConnectionAvailability(isAvailable)
+                }
+            }
+        }
+
+        DiagnosticLog.record(
+            "Screen state diagnostic observing: "
+                + notificationNames.map(\.rawValue).joined(separator: ", ")
+        )
+    }
+
+    private func updateConnectionAvailability(_ isAvailable: Bool) {
+        isConnectionAvailable = isAvailable
+        model?.setConnectionAvailable(isAvailable)
     }
 }
 

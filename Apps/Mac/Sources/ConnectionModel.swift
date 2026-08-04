@@ -20,6 +20,7 @@ final class ConnectionModel {
     private(set) var phase = ConnectionPhase.ready
     private(set) var accessibilityAccessGranted: Bool
     private(set) var localNetworkAccess: LocalNetworkAccessStatus
+    private(set) var isConnectionAvailable = false
     private let connect: ConnectOperation
     private let activateForRemoteConnection: ActivationOperation
     private let connectionStatus: ConnectionStatusOperation
@@ -92,6 +93,17 @@ final class ConnectionModel {
 
     func refreshConnectionStatus() {
         applyConnectionStatus(connectionStatus())
+    }
+
+    func setConnectionAvailable(_ isAvailable: Bool) {
+        guard isConnectionAvailable != isAvailable else {
+            return
+        }
+
+        isConnectionAvailable = isAvailable
+        DiagnosticLog.record(
+            "Mac connection availability changed: available=\(isAvailable)"
+        )
     }
 
     func refreshAccessibilityPermission() {
@@ -233,9 +245,13 @@ final class ConnectionModel {
             let isConnected = connectionStatus()
             applyConnectionStatus(isConnected)
             DiagnosticLog.record(
-                "Remote status response: connected=\(isConnected)"
+                "Remote status response: connected=\(isConnected), "
+                    + "available=\(isConnectionAvailable)"
             )
-            return .status(isConnected: isConnected)
+            return .status(
+                isConnected: isConnected,
+                isAvailable: isConnectionAvailable
+            )
         }
     }
 
@@ -246,6 +262,11 @@ final class ConnectionModel {
             "Remote connect request received; target="
                 + (visionProName ?? "automatic")
         )
+        guard isConnectionAvailable else {
+            let message = "Unlock the Mac before connecting."
+            DiagnosticLog.record("Remote response: unavailable")
+            return .failed(message: message)
+        }
         guard !isWorking else {
             DiagnosticLog.record("Remote response: busy")
             return .busy
@@ -254,6 +275,11 @@ final class ConnectionModel {
         DiagnosticLog.record("Activating Mac app for remote request")
         let isApplicationActive = await activateForRemoteConnection()
         DiagnosticLog.record("Mac app active: \(isApplicationActive)")
+        guard isConnectionAvailable else {
+            let message = "Unlock the Mac before connecting."
+            DiagnosticLog.record("Remote response: unavailable")
+            return .failed(message: message)
+        }
         guard isApplicationActive else {
             let message =
                 "Mac Display Connect could not move to the foreground. "

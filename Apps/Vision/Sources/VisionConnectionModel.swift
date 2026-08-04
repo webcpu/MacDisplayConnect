@@ -38,6 +38,7 @@ final class VisionConnectionModel {
     @ObservationIgnored private var lastSelectedMac: RemoteMac?
     @ObservationIgnored private var isSceneActive = false
     @ObservationIgnored private var isAutoConnectArmed = false
+    @ObservationIgnored private var lastConnectionAvailability: Bool?
     @ObservationIgnored private var statusGeneration = 0
 
     init(
@@ -80,13 +81,20 @@ final class VisionConnectionModel {
     }
 
     func sceneDidBecomeActive() async {
+        guard !Task.isCancelled else {
+            return
+        }
+
         isSceneActive = true
         isAutoConnectArmed = true
-        await attemptAutoConnect()
+        lastConnectionAvailability = nil
+        await refreshStatus()
     }
 
     func sceneDidLeaveActive() {
         isSceneActive = false
+        statusGeneration += 1
+        lastConnectionAvailability = nil
         guard isAutoConnectArmed else {
             return
         }
@@ -103,6 +111,9 @@ final class VisionConnectionModel {
         }
 
         statusGeneration += 1
+        if lastSelectedMac?.endpoint != mac.endpoint {
+            lastConnectionAvailability = nil
+        }
         lastSelectedMac = mac
         phase = .connecting(mac.name)
 
@@ -131,17 +142,18 @@ final class VisionConnectionModel {
         statusGeneration += 1
         let generation = statusGeneration
 
-        let isConnected: Bool?
+        let status: (isConnected: Bool, isAvailable: Bool)?
         do {
-            if case let .status(value) = try await sendStatus(mac.endpoint) {
-                isConnected = value
+            if case let .status(isConnected, isAvailable) =
+                try await sendStatus(mac.endpoint) {
+                status = (isConnected, isAvailable)
             } else {
-                isConnected = nil
+                status = nil
             }
         } catch is CancellationError {
             return
         } catch {
-            isConnected = nil
+            status = nil
         }
 
         guard generation == statusGeneration,
@@ -151,18 +163,21 @@ final class VisionConnectionModel {
             return
         }
 
-        if let isConnected {
+        if let status {
             phase = phase.applyingConnectionStatus(
-                isConnected,
+                status.isConnected,
                 hasAvailableMacs: !macs.isEmpty
             )
         } else {
             phase = phase.applyingUnavailableStatus()
         }
 
-        await attemptAutoConnect(
-            confirmedConnected: isConnected == true
-        )
+        if let status {
+            await applyConnectionAvailability(
+                status.isAvailable,
+                confirmedConnected: status.isConnected
+            )
+        }
     }
 
     func monitorStatus() async {
@@ -187,6 +202,7 @@ final class VisionConnectionModel {
 
             if didRemoveSelectedMac {
                 statusGeneration += 1
+                lastConnectionAvailability = nil
             }
 
             if didRemoveSelectedMac, phase.isConnected {
@@ -196,14 +212,45 @@ final class VisionConnectionModel {
             }
 
             if isSceneActive {
-                isAutoConnectArmed = true
+                await refreshStatus()
             }
-            await attemptAutoConnect()
         case let .unavailable(message):
             if macs.isEmpty, phase.acceptsDiscoveryUpdates {
                 phase = .discoveryFailure(message)
             }
         }
+    }
+
+    private func applyConnectionAvailability(
+        _ isAvailable: Bool,
+        confirmedConnected: Bool
+    ) async {
+        guard isSceneActive else {
+            return
+        }
+
+        let wasAvailable = lastConnectionAvailability
+        lastConnectionAvailability = isAvailable
+
+        guard isAvailable else {
+            if wasAvailable != false {
+                VisionDiagnosticLog.record(
+                    "Auto-connect waiting: Mac is unavailable"
+                )
+            }
+            return
+        }
+
+        if wasAvailable == false {
+            isAutoConnectArmed = true
+            VisionDiagnosticLog.record(
+                "Auto-connect armed: Mac became available"
+            )
+        }
+
+        await attemptAutoConnect(
+            confirmedConnected: confirmedConnected
+        )
     }
 
     private func attemptAutoConnect(
@@ -247,14 +294,8 @@ final class VisionConnectionModel {
                 "Auto-connect attempting \(mac.name)"
             )
             await connect(to: mac)
-            isAutoConnectArmed = isSceneActive
-                && readAutoConnectEnabled()
-                && !phase.isConnected
-            let nextStep = isAutoConnectArmed
-                ? "; waiting for discovery update"
-                : ""
             VisionDiagnosticLog.record(
-                "Auto-connect outcome: \(phase.title)\(nextStep)"
+                "Auto-connect outcome: \(phase.title)"
             )
         }
     }
@@ -320,7 +361,7 @@ enum VisionConnectionPhase: Equatable {
             )
         case let .failed(message):
             self = .failure(message)
-        case let .status(isConnected):
+        case let .status(isConnected, _):
             self = isConnected
                 ? .success(Self.connectedMessage)
                 : .ready

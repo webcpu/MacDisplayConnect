@@ -7,6 +7,7 @@ struct MacDisplayConnectVisionApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var autoConnectPreference: AutoConnectPreference
     @State private var model: VisionConnectionModel
+    @State private var sceneActivationTask: Task<Void, Never>?
 
     init() {
         let preference = AutoConnectPreference()
@@ -46,11 +47,16 @@ struct MacDisplayConnectVisionApp: App {
                     + newPhase.diagnosticName
             )
 
+            sceneActivationTask?.cancel()
             if newPhase == .active {
-                Task {
+                sceneActivationTask = Task {
+                    guard !Task.isCancelled else {
+                        return
+                    }
                     await model.sceneDidBecomeActive()
                 }
             } else {
+                sceneActivationTask = nil
                 model.sceneDidLeaveActive()
             }
         }

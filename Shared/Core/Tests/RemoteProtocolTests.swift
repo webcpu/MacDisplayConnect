@@ -82,15 +82,38 @@ struct RemoteProtocolTests {
     }
 
     @Test(
-        "round-trips the current connection status",
-        arguments: [true, false]
+        "round-trips the current connection status and availability",
+        arguments: [
+            (true, true),
+            (true, false),
+            (false, true),
+            (false, false),
+        ]
     )
-    func roundTripsConnectionStatus(isConnected: Bool) throws {
-        let response = RemoteResponse.status(isConnected: isConnected)
+    func roundTripsConnectionStatus(
+        isConnected: Bool,
+        isAvailable: Bool
+    ) throws {
+        let response = RemoteResponse.status(
+            isConnected: isConnected,
+            isAvailable: isAvailable
+        )
 
         let frame = try RemoteProtocol.encode(response)
 
         #expect(try RemoteProtocol.decodeResponse(frame) == response)
+    }
+
+    @Test("treats a legacy status response as unavailable")
+    func legacyStatusResponseFailsClosed() throws {
+        let frame = jsonLine(
+            #"{"version":1,"status":"status","isConnected":false}"#
+        )
+
+        #expect(
+            try RemoteProtocol.decodeResponse(frame)
+                == .status(isConnected: false, isAvailable: false)
+        )
     }
 
     @Test("rejects an unsupported request version")
