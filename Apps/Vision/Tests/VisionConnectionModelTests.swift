@@ -20,6 +20,22 @@ struct VisionConnectionModelTests {
         )
     }
 
+    @Test("discovery failures explain how to find the Mac")
+    func discoveryFailureGuidance() {
+        let phase = VisionConnectionPhase.discoveryFailure(
+            "The operation couldn’t be completed. "
+                + "(kNWErrorDomainDNS error -65569 - DefunctConnection)"
+        )
+
+        #expect(phase.title == "Mac Not Found")
+        #expect(
+            phase.message
+                == "Open Mac Display Connect on your Mac and leave it running. "
+                    + "If it’s already open, make sure both devices are on the "
+                    + "same local network."
+        )
+    }
+
     @Test("only actionable phases offer a button title")
     func connectionPhaseActions() {
         #expect(VisionConnectionPhase.searching.actionTitle == nil)

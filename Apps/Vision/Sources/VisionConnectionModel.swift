@@ -414,8 +414,10 @@ enum VisionConnectionPhase: Equatable {
             "Connected"
         case .statusUnavailable:
             "Status Unavailable"
-        case .failure, .discoveryFailure:
+        case .failure:
             "Couldn’t Connect"
+        case .discoveryFailure:
+            "Mac Not Found"
         }
     }
 
@@ -431,8 +433,10 @@ enum VisionConnectionPhase: Equatable {
             message
         case .statusUnavailable:
             "The Mac could not confirm whether Mac Virtual Display is connected."
-        case let .discoveryFailure(message):
-            "Mac discovery is unavailable: \(message)"
+        case .discoveryFailure:
+            "Open Mac Display Connect on your Mac and leave it running. "
+                + "If it’s already open, make sure both devices are on the "
+                + "same local network."
         }
     }
 

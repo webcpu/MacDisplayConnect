@@ -18,8 +18,8 @@ enum ControlCenter {
 
     static func openScreenMirroring() async throws {
         DiagnosticLog.record("Opening Screen Mirroring")
-        let application = try controlCenterApplication()
-        try await openScreenMirroring(using: automation(for: application))
+        let applications = try controlCenterApplications()
+        try await openScreenMirroring(using: automation(for: applications))
     }
 
     static func openScreenMirroring(
@@ -119,10 +119,10 @@ enum ControlCenter {
             "Selecting Mac Virtual Display; target="
                 + (visionProName ?? "automatic")
         )
-        let application = try controlCenterApplication()
+        let applications = try controlCenterApplications()
         return try await connectMacVirtualDisplay(
             visionProName: visionProName,
-            using: automation(for: application)
+            using: automation(for: applications)
         )
     }
 
@@ -185,9 +185,9 @@ enum ControlCenter {
 
     static func dismissScreenMirroringIfStillOpen() async {
         do {
-            let application = try controlCenterApplication()
+            let applications = try controlCenterApplications()
             await dismissScreenMirroringIfStillOpen(
-                using: automation(for: application)
+                using: automation(for: applications)
             )
         } catch {
             DiagnosticLog.record(
@@ -242,10 +242,10 @@ enum ControlCenter {
             "Deselecting Mac Virtual Display; target="
                 + (visionProName ?? "automatic")
         )
-        let application = try controlCenterApplication()
+        let applications = try controlCenterApplications()
         return try await disconnectMacVirtualDisplay(
             visionProName: visionProName,
-            using: automation(for: application)
+            using: automation(for: applications)
         )
     }
 
@@ -340,29 +340,58 @@ enum ControlCenter {
         }
     }
 
-    private static func controlCenterApplication() throws -> AXUIElement {
-        guard let process = NSRunningApplication.runningApplications(
-            withBundleIdentifier: "com.apple.controlcenter"
-        ).first else {
+    static func controlCenterApplications(
+        processIdentifier: (String) -> pid_t? = {
+            NSRunningApplication.runningApplications(
+                withBundleIdentifier: $0
+            ).first?.processIdentifier
+        }
+    ) throws -> [AXUIElement] {
+        guard let controlCenterPID = processIdentifier(
+            "com.apple.controlcenter"
+        ) else {
             DiagnosticLog.record("Control Center process was not running")
             throw MacDisplayConnectError.controlCenterNotRunning
         }
 
         DiagnosticLog.record(
-            "Found Control Center process pid=\(process.processIdentifier)"
+            "Found Control Center process pid=\(controlCenterPID)"
         )
-        return AXUIElementCreateApplication(process.processIdentifier)
+        var applications = [AXUIElementCreateApplication(controlCenterPID)]
+        // macOS 27 hosts the menu bar separately from Control Center's panels.
+        if let menuBarPID = processIdentifier("com.apple.MenuBarAgent") {
+            DiagnosticLog.record("Found Menu Bar Agent process pid=\(menuBarPID)")
+            applications.append(AXUIElementCreateApplication(menuBarPID))
+        }
+        return applications
+    }
+
+    static func mergedAccessibilityElements(
+        _ trees: [[AXUIElement]]
+    ) -> [AXUIElement] {
+        var elements: [AXUIElement] = []
+        for tree in trees {
+            // Remote AX nodes can appear in both processes. Keep the first
+            // occurrence, without conflating distinct rows that share an ID.
+            let additionalElements = tree.filter { candidate in
+                !elements.contains { CFEqual($0, candidate) }
+            }
+            elements.append(contentsOf: additionalElements)
+        }
+        return elements
     }
 
     private static func automation(
-        for application: AXUIElement
+        for applications: [AXUIElement]
     ) -> ControlCenterAutomation {
         ControlCenterAutomation(
             maximumAttempts: ControlCenterTiming.actionAttempts,
             connectionReadinessAttempts:
                 ControlCenterTiming.connectionReadinessAttempts,
             scan: {
-                let elements = accessibilityTree(from: application)
+                let elements = mergedAccessibilityElements(applications.map {
+                    accessibilityTree(from: $0)
+                })
                 return ControlCenterScan(
                     snapshots: elements.snapshots,
                     isWindow: { index in
