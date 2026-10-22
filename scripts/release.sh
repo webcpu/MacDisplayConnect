@@ -374,7 +374,8 @@ local_asset_digest="sha256:$(
 )"
 
 release_id=$(
-    github_api "repos/$repository/releases/tags/$tag" --jq .id
+    gh release view "$tag" --repo "$repository_selector" \
+        --json databaseId --jq .databaseId
 ) || die "Could not resolve draft release $tag."
 read_release_snapshot
 [[ "$snapshot_release_id" == "$release_id" \
@@ -441,7 +442,8 @@ git fetch origin "$release_branch"
 [[ "$(remote_tag_target)" == "$release_commit" ]] \
     || die "Remote tag $tag changed before publication."
 tag_release_id=$(
-    github_api "repos/$repository/releases/tags/$tag" --jq .id
+    gh release view "$tag" --repo "$repository_selector" \
+        --json databaseId --jq .databaseId
 ) || die "Could not recheck GitHub release $tag."
 [[ "$tag_release_id" == "$release_id" ]] \
     || die "GitHub release $tag changed before publication."
