@@ -3,6 +3,86 @@ import Testing
 
 @Suite("Control Center action planning")
 struct ControlCenterPlannerTests {
+    @Test("conflicting duplicate headers cannot impersonate a mode")
+    func rejectsConflictingHeadersWhoseNameMatchesMode() {
+        let targetID = "screen-mirroring-device-AirPlay:AVP"
+        let elements = [true, false].enumerated().map { index, selected in
+            element(
+                index: 9 + index,
+                kind: .checkbox,
+                identifier: targetID,
+                text: ["Mac Virtual Display"],
+                isSelected: selected
+            )
+        }
+
+        #expect(
+            ControlCenterPlanner.action(
+                for: elements,
+                visionProIdentifiers: [targetID]
+            ) == .visionProNotFound
+        )
+    }
+
+    @Test(
+        "a collapsed headset named Mac Virtual Display is still a device header",
+        arguments: [1, 2]
+    )
+    func expandsHeadsetWhoseNameMatchesMode(duplicateCount: Int) {
+        let targetID = "screen-mirroring-device-AirPlay:AVP"
+        let elements = (0..<duplicateCount).map {
+            element(
+                index: 9 + $0,
+                kind: .checkbox,
+                identifier: targetID,
+                text: ["Mac Virtual Display"],
+                isSelected: false
+            )
+        }
+
+        #expect(
+            ControlCenterPlanner.action(
+                for: elements,
+                visionProIdentifiers: [targetID]
+            ) == .expandVisionPro(elementIndex: 9)
+        )
+    }
+
+    @Test("the first device header is not mistaken for its identically named mode")
+    func selectsModeAfterIdenticallyNamedHeader() {
+        let targetID = "screen-mirroring-device-AirPlay:AVP"
+        let elements = [
+            element(
+                index: 9,
+                kind: .checkbox,
+                identifier: targetID,
+                text: ["Mac Virtual Display"],
+                isSelected: true
+            ),
+            element(
+                index: 10,
+                kind: .checkbox,
+                identifier: targetID,
+                text: ["Mac Virtual Display"],
+                isSelected: false
+            ),
+            element(
+                index: 11,
+                kind: .checkbox,
+                identifier: targetID,
+                text: ["Mirror Display"],
+                isSelected: false
+            ),
+        ]
+
+        #expect(
+            ControlCenterPlanner.action(
+                for: elements,
+                visionProIdentifiers: [targetID]
+            ) == .selectMacVirtualDisplay(elementIndex: 10)
+        )
+    }
+
     @Test("opens Control Center when the pinned Screen Mirroring label is hidden")
     func opensControlCenterFallback() {
         let elements = [
@@ -102,8 +182,10 @@ struct ControlCenterPlannerTests {
         ]
 
         #expect(
-            ControlCenterPlanner.action(for: elements)
-                == .expandVisionPro(elementIndex: 1)
+            ControlCenterPlanner.action(
+                for: elements,
+                visionProIdentifiers: ["screen-mirroring-device-AirPlay:AVP"]
+            ) == .expandVisionPro(elementIndex: 1)
         )
     }
 
@@ -168,13 +250,15 @@ struct ControlCenterPlannerTests {
         ]
 
         #expect(
-            ControlCenterPlanner.action(for: elements)
-                == .selectMacVirtualDisplay(elementIndex: 3)
+            ControlCenterPlanner.action(
+                for: elements,
+                visionProIdentifiers: [targetID]
+            ) == .selectMacVirtualDisplay(elementIndex: 3)
         )
     }
 
-    @Test("expands the named AirPlay Vision Pro from the real device list")
-    func expandsNamedAirPlayVisionPro() {
+    @Test("expands a trusted custom-named AirPlay Vision Pro among unrelated devices")
+    func expandsTrustedAirPlayVisionPro() {
         let elements = [
             element(
                 index: 8,
@@ -187,7 +271,7 @@ struct ControlCenterPlannerTests {
                 index: 9,
                 kind: .checkbox,
                 identifier: "screen-mirroring-device-AirPlay:AVP",
-                text: ["S’s Apple\u{00A0}Vision\u{00A0}Pro"],
+                text: ["avp\u{00A0}"],
                 isSelected: false
             ),
             element(
@@ -209,7 +293,7 @@ struct ControlCenterPlannerTests {
         #expect(
             ControlCenterPlanner.action(
                 for: elements,
-                visionProName: "S’s Apple Vision Pro"
+                visionProIdentifiers: ["screen-mirroring-device-AirPlay:AVP"]
             ) == .expandVisionPro(elementIndex: 9)
         )
     }
@@ -259,7 +343,7 @@ struct ControlCenterPlannerTests {
         #expect(
             ControlCenterPlanner.action(
                 for: elements,
-                visionProName: "Apple Vision Pro"
+                visionProIdentifiers: [visionProID]
             ) == .expandVisionPro(elementIndex: 9)
         )
     }
@@ -294,7 +378,7 @@ struct ControlCenterPlannerTests {
         #expect(
             ControlCenterPlanner.action(
                 for: elements,
-                visionProName: "S’s Apple Vision Pro"
+                visionProIdentifiers: [targetID]
             ) == .selectMacVirtualDisplay(elementIndex: 10)
         )
     }
@@ -350,33 +434,23 @@ struct ControlCenterPlannerTests {
         #expect(
             ControlCenterPlanner.action(
                 for: elements,
-                visionProName: "S’s Apple Vision Pro"
+                visionProIdentifiers: [targetID]
             ) == .selectMacVirtualDisplay(elementIndex: 9)
         )
     }
 
-    @Test("uses a generic Vision Pro name when it identifies one device")
-    func selectsUniqueVisionProFromGenericName() {
+    @Test(
+        "trusted AirPlay device selection ignores arbitrary, empty, and renamed labels",
+        arguments: ["avp", "", "Renamed headset"]
+    )
+    func selectsTrustedAirPlayRegardlessOfLabel(label: String) {
+        let targetID = "screen-mirroring-device-AirPlay:AVP"
         let elements = [
-            element(
-                index: 8,
-                kind: .checkbox,
-                identifier: "screen-mirroring-device-Sidecar:IPAD",
-                text: ["ipad1"],
-                isSelected: false
-            ),
             element(
                 index: 9,
                 kind: .checkbox,
-                identifier: "screen-mirroring-device-AirPlay:AVP",
-                text: ["S’s Apple\u{00A0}Vision\u{00A0}Pro"],
-                isSelected: false
-            ),
-            element(
-                index: 10,
-                kind: .checkbox,
-                identifier: "screen-mirroring-device-AirPlay:TV",
-                text: ["TV"],
+                identifier: targetID,
+                text: [label],
                 isSelected: false
             ),
         ]
@@ -384,26 +458,26 @@ struct ControlCenterPlannerTests {
         #expect(
             ControlCenterPlanner.action(
                 for: elements,
-                visionProName: "Apple Vision Pro"
+                visionProIdentifiers: [targetID]
             ) == .expandVisionPro(elementIndex: 9)
         )
     }
 
-    @Test("does not guess when a generic name matches multiple Vision Pros")
-    func rejectsAmbiguousGenericVisionProName() {
+    @Test("does not guess when multiple trusted Vision Pros are present")
+    func rejectsMultipleTrustedVisionPros() {
         let elements = [
             element(
                 index: 8,
                 kind: .checkbox,
                 identifier: "screen-mirroring-device-Sidecar:ONE",
-                text: ["Alice’s Apple Vision Pro"],
+                text: ["avp"],
                 isSelected: false
             ),
             element(
                 index: 9,
                 kind: .checkbox,
                 identifier: "screen-mirroring-device-Sidecar:TWO",
-                text: ["Bob’s Apple Vision Pro"],
+                text: ["Work headset"],
                 isSelected: false
             ),
         ]
@@ -411,19 +485,22 @@ struct ControlCenterPlannerTests {
         #expect(
             ControlCenterPlanner.action(
                 for: elements,
-                visionProName: "Apple Vision Pro"
+                visionProIdentifiers: [
+                    "screen-mirroring-device-Sidecar:ONE",
+                    "screen-mirroring-device-Sidecar:TWO",
+                ]
             ) == .visionProNotFound
         )
     }
 
-    @Test("does not partially match a personalized device name")
-    func rejectsPartialPersonalizedVisionProName() {
+    @Test("empty discovery does not fall back to an Apple Vision Pro label")
+    func rejectsVisionProLabelWithoutDiscovery() {
         let elements = [
             element(
                 index: 9,
                 kind: .checkbox,
                 identifier: "screen-mirroring-device-Sidecar:AVP",
-                text: ["Living Room Apple Vision Pro"],
+                text: ["Apple Vision Pro"],
                 isSelected: false
             ),
         ]
@@ -431,19 +508,19 @@ struct ControlCenterPlannerTests {
         #expect(
             ControlCenterPlanner.action(
                 for: elements,
-                visionProName: "Living Room"
+                visionProIdentifiers: []
             ) == .visionProNotFound
         )
     }
 
-    @Test("does not select an exact AirPlay name")
-    func rejectsExactAirPlayName() {
+    @Test("a misleading Apple Vision Pro label cannot authorize an unrelated AirPlay row")
+    func rejectsMisleadingVisionProLabel() {
         let elements = [
             element(
                 index: 10,
                 kind: .checkbox,
                 identifier: "screen-mirroring-device-AirPlay:TV",
-                text: ["Living Room"],
+                text: ["Apple Vision Pro"],
                 isSelected: false
             ),
         ]
@@ -451,39 +528,47 @@ struct ControlCenterPlannerTests {
         #expect(
             ControlCenterPlanner.action(
                 for: elements,
-                visionProName: "Living Room"
+                visionProIdentifiers: ["screen-mirroring-device-AirPlay:AVP"]
             ) == .visionProNotFound
         )
     }
 
-    @Test("does not use a generic name to select an AirPlay device")
-    func rejectsGenericAirPlayName() {
-        let elements = [
-            element(
-                index: 10,
-                kind: .checkbox,
-                identifier: "screen-mirroring-device-AirPlay:TV",
-                text: ["Living Room Apple Vision Pro TV"],
-                isSelected: false
-            ),
+    @Test("either known transport alias works when it is the only alias present")
+    func selectsOnlyPresentTransportAlias() {
+        let airPlayID = "screen-mirroring-device-AirPlay:AVP"
+        let sidecarID = "screen-mirroring-device-Sidecar:AVP"
+        let cases: [(String, ControlCenterAction)] = [
+            (airPlayID, .expandVisionPro(elementIndex: 9)),
+            (sidecarID, .selectMacVirtualDisplay(elementIndex: 9)),
         ]
 
-        #expect(
-            ControlCenterPlanner.action(
-                for: elements,
-                visionProName: "Apple Vision Pro"
-            ) == .visionProNotFound
-        )
+        for (identifier, expectedAction) in cases {
+            let elements = [
+                element(
+                    index: 9,
+                    kind: .checkbox,
+                    identifier: identifier,
+                    isSelected: false
+                ),
+            ]
+
+            #expect(
+                ControlCenterPlanner.action(
+                    for: elements,
+                    visionProIdentifiers: [airPlayID, sidecarID]
+                ) == expectedAction
+            )
+        }
     }
 
-    @Test("automatic selection uses a uniquely labeled Vision Pro")
-    func automaticallySelectsUniqueVisionPro() {
+    @Test("selects a trusted Sidecar Vision Pro without using its label")
+    func selectsTrustedSidecarVisionPro() {
         let elements = [
             element(
                 index: 9,
                 kind: .checkbox,
                 identifier: "screen-mirroring-device-Sidecar:AVP",
-                text: ["S’s Apple\u{00A0}Vision\u{00A0}Pro"],
+                text: ["avp"],
                 isSelected: false
             ),
             element(
@@ -496,13 +581,15 @@ struct ControlCenterPlannerTests {
         ]
 
         #expect(
-            ControlCenterPlanner.action(for: elements)
-                == .selectMacVirtualDisplay(elementIndex: 9)
+            ControlCenterPlanner.action(
+                for: elements,
+                visionProIdentifiers: ["screen-mirroring-device-Sidecar:AVP"]
+            ) == .selectMacVirtualDisplay(elementIndex: 9)
         )
     }
 
-    @Test("leaves the named Vision Pro alone when it is already connected")
-    func leavesNamedVisionProConnected() {
+    @Test("leaves the trusted Vision Pro alone when it is already connected")
+    func leavesTrustedVisionProConnected() {
         let elements = [
             element(
                 index: 9,
@@ -516,13 +603,13 @@ struct ControlCenterPlannerTests {
         #expect(
             ControlCenterPlanner.action(
                 for: elements,
-                visionProName: "S’s Apple Vision Pro"
+                visionProIdentifiers: ["screen-mirroring-device-Sidecar:AVP"]
             ) == .alreadyConnected
         )
     }
 
-    @Test("does not select another device when the named Vision Pro is absent")
-    func rejectsMissingVisionProName() {
+    @Test("does not select another device when the trusted Vision Pro is absent")
+    func rejectsMissingTrustedVisionPro() {
         let elements = [
             element(
                 index: 9,
@@ -543,13 +630,13 @@ struct ControlCenterPlannerTests {
         #expect(
             ControlCenterPlanner.action(
                 for: elements,
-                visionProName: "S’s Apple Vision Pro"
+                visionProIdentifiers: ["screen-mirroring-device-Sidecar:AVP"]
             ) == .visionProNotFound
         )
     }
 
-    @Test("does not guess when the Vision Pro name is duplicated")
-    func rejectsDuplicateVisionProNames() {
+    @Test("identical labels do not make two trusted IDs one device")
+    func rejectsDistinctTrustedIDsWithIdenticalLabels() {
         let elements = [
             element(
                 index: 8,
@@ -570,7 +657,10 @@ struct ControlCenterPlannerTests {
         #expect(
             ControlCenterPlanner.action(
                 for: elements,
-                visionProName: "Shared Apple Vision Pro"
+                visionProIdentifiers: [
+                    "screen-mirroring-device-Sidecar:ONE",
+                    "screen-mirroring-device-Sidecar:TWO",
+                ]
             ) == .visionProNotFound
         )
     }
@@ -597,7 +687,7 @@ struct ControlCenterPlannerTests {
         #expect(
             ControlCenterPlanner.action(
                 for: elements,
-                visionProName: "S’s Apple Vision Pro"
+                visionProIdentifiers: [targetID]
             ) == .visionProNotFound
         )
     }
@@ -636,7 +726,10 @@ struct ControlCenterPlannerTests {
         ]
 
         #expect(
-            ControlCenterPlanner.action(for: elements) == .alreadyConnected
+            ControlCenterPlanner.action(
+                for: elements,
+                visionProIdentifiers: [targetID]
+            ) == .alreadyConnected
         )
     }
 
@@ -652,11 +745,14 @@ struct ControlCenterPlannerTests {
         ]
 
         #expect(
-            ControlCenterPlanner.action(for: elements) == .visionProNotFound
+            ControlCenterPlanner.action(
+                for: elements,
+                visionProIdentifiers: ["screen-mirroring-device-Sidecar:AVP"]
+            ) == .visionProNotFound
         )
     }
 
-    @Test("does not guess when multiple expandable devices are present")
+    @Test("does not guess when multiple trusted expandable devices are present")
     func rejectsAmbiguousExpandableDevices() {
         let elements = [
             element(
@@ -672,7 +768,64 @@ struct ControlCenterPlannerTests {
         ]
 
         #expect(
-            ControlCenterPlanner.action(for: elements) == .visionProNotFound
+            ControlCenterPlanner.action(
+                for: elements,
+                visionProIdentifiers: [
+                    "screen-mirroring-device-AirPlay:ONE",
+                    "screen-mirroring-device-AirPlay:TWO",
+                ]
+            ) == .visionProNotFound
+        )
+    }
+
+    @Test("simultaneous trusted transport aliases remain ambiguous")
+    func rejectsSimultaneousTransportAliases() {
+        let airPlayID = "screen-mirroring-device-AirPlay:AVP"
+        let sidecarID = "screen-mirroring-device-Sidecar:AVP"
+        let elements = [
+            element(
+                index: 8,
+                kind: .checkbox,
+                identifier: airPlayID,
+                text: ["avp"],
+                isSelected: false
+            ),
+            element(
+                index: 9,
+                kind: .checkbox,
+                identifier: sidecarID,
+                text: ["avp"],
+                isSelected: false
+            ),
+        ]
+
+        #expect(
+            ControlCenterPlanner.action(
+                for: elements,
+                visionProIdentifiers: [airPlayID, sidecarID]
+            ) == .visionProNotFound
+        )
+    }
+
+    @Test("non-actionable trusted metadata does not make another device ambiguous")
+    func ignoresNonActionableTrustedAlias() {
+        let airPlayID = "screen-mirroring-device-AirPlay:AVP"
+        let sidecarID = "screen-mirroring-device-Sidecar:AVP"
+        let elements = [
+            element(index: 8, kind: .other, identifier: airPlayID),
+            element(
+                index: 9,
+                kind: .checkbox,
+                identifier: sidecarID,
+                isSelected: false
+            ),
+        ]
+
+        #expect(
+            ControlCenterPlanner.action(
+                for: elements,
+                visionProIdentifiers: [airPlayID, sidecarID]
+            ) == .selectMacVirtualDisplay(elementIndex: 9)
         )
     }
 

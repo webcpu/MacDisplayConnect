@@ -7,11 +7,10 @@ script_name=${0:t}
 application_directory="$project_directory/.build/products/Mac Display Connect.app"
 application_executable="$application_directory/Contents/MacOS/MacDisplayConnect"
 cycle_count=20
-vision_pro_name=""
 
 usage() {
     print -u2 \
-        "Usage: $script_name [--cycles COUNT] [--vision-pro-name NAME]"
+        "Usage: $script_name [--cycles COUNT]"
 }
 
 require_app_not_running() {
@@ -31,13 +30,9 @@ while (( $# > 0 )); do
             cycle_count=$2
             shift 2
             ;;
-        --vision-pro-name)
-            (( $# >= 2 )) || {
-                usage
-                exit 64
-            }
-            vision_pro_name=$2
-            shift 2
+        --vision-pro-name|--vision-pro-name=*)
+            print -u2 -- "--vision-pro-name is no longer supported. Omit it; the test requires one unambiguous Apple Vision Pro."
+            exit 64
             ;;
         --help|-h)
             usage
@@ -73,9 +68,6 @@ arguments=(
     --system-test-cycles "$cycle_count"
     --system-test-report "$report_path"
 )
-if [[ -n "$vision_pro_name" ]]; then
-    arguments+=(--vision-pro-name "$vision_pro_name")
-fi
 
 print "Physical-device system test: $cycle_count cycle(s)"
 print "Keep Apple Vision Pro worn and unlocked for the entire run."
@@ -86,7 +78,7 @@ started_at=$(date "+%Y-%m-%d %H:%M:%S")
     print "run_id=$run_id"
     print "started_at=$started_at"
     print "cycles=$cycle_count"
-    print "vision_pro_name=${vision_pro_name:-automatic}"
+    print "device_selection=automatic"
     print "executable=$application_executable"
 } >"$run_metadata"
 

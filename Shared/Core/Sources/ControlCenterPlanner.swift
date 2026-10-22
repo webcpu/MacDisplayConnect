@@ -97,11 +97,11 @@ public enum ControlCenterNavigationPlanner {
 public enum ControlCenterPlanner {
     public static func action(
         for elements: [ControlCenterElement],
-        visionProName: String? = nil
+        visionProIdentifiers: Set<String> = []
     ) -> ControlCenterAction {
         guard let identifier = visionProIdentifier(
             in: elements,
-            named: visionProName ?? "Apple Vision Pro"
+            knownIdentifiers: visionProIdentifiers
         ) else {
             return .visionProNotFound
         }
@@ -114,75 +114,54 @@ public enum ControlCenterPlanner {
 
     fileprivate static func visionProIdentifier(
         in elements: [ControlCenterElement],
-        named visionProName: String
+        knownIdentifiers: Set<String>
     ) -> String? {
-        let normalizedName = visionProName.normalizedForMatching
-        guard !normalizedName.isEmpty else {
-            return nil
-        }
-
-        let exactIdentifiers: Set<String> = Set(
+        let identifiers = Set(
             elements.compactMap { element -> String? in
                 guard element.kind != .other,
-                      element.describesVisionPro,
                       let identifier = element.identifier,
-                      identifier.hasPrefix("screen-mirroring-device-")
+                      knownIdentifiers.contains(identifier),
+                      identifier.hasPrefix("screen-mirroring-device-Sidecar:")
+                        || identifier.hasPrefix("screen-mirroring-device-AirPlay:")
                 else {
-                    return nil
-                }
-                guard element.text.contains(where: {
-                    $0.normalizedForMatching == normalizedName
-                }) else {
                     return nil
                 }
                 return identifier
             }
         )
-
-        if exactIdentifiers.count == 1 {
-            return exactIdentifiers.first
-        }
-        guard exactIdentifiers.isEmpty else {
-            return nil
-        }
-        guard normalizedName == "apple vision pro" else {
-            return nil
-        }
-
-        let containingIdentifiers: Set<String> = Set(
-            elements.compactMap { element -> String? in
-                guard element.kind != .other,
-                      element.describesVisionPro,
-                      let identifier = element.identifier,
-                      identifier.hasPrefix("screen-mirroring-device-")
-                else {
-                    return nil
-                }
-                guard element.text.contains(where: {
-                    $0.normalizedForMatching.hasSuffix(normalizedName)
-                }) else {
-                    return nil
-                }
-                return identifier
-            }
-        )
-
-        guard containingIdentifiers.count == 1 else {
-            return nil
-        }
-        return containingIdentifiers.first
+        return identifiers.count == 1 ? identifiers.first : nil
     }
 
     private static func macVirtualDisplayAction(
         in elements: [ControlCenterElement],
         identifier: String
     ) -> ControlCenterAction {
-        let matchingCheckboxes = elements.filter {
-            $0.kind == .checkbox && $0.identifier == identifier
+        let matchingControls = elements.filter {
+            $0.kind != .other && $0.identifier == identifier
         }
-        let macVirtualDisplayRows = matchingCheckboxes.filter(
-            \.describesMacVirtualDisplay
-        )
+        guard let visionPro = matchingControls.first else {
+            return .visionProNotFound
+        }
+        let containsOnlyAirPlayHeaders =
+            identifier.hasPrefix("screen-mirroring-device-AirPlay:")
+            && matchingControls.dropFirst().allSatisfy {
+                $0.kind == visionPro.kind
+                    && $0.text == visionPro.text
+            }
+        guard !containsOnlyAirPlayHeaders
+            || matchingControls.allSatisfy({
+                $0.isSelected == visionPro.isSelected
+            })
+        else {
+            return .visionProNotFound
+        }
+        // The first control is the device header, even when its name matches
+        // a mode label. Identical collapsed headers are not child modes.
+        let macVirtualDisplayRows = matchingControls.dropFirst().filter {
+            !containsOnlyAirPlayHeaders
+                && $0.kind == .checkbox
+                && $0.describesMacVirtualDisplay
+        }
         if let macVirtualDisplay = macVirtualDisplayRows.first {
             guard macVirtualDisplayRows.dropFirst().allSatisfy({
                 $0.isSelected == macVirtualDisplay.isSelected
@@ -196,24 +175,8 @@ public enum ControlCenterPlanner {
                 )
         }
 
-        let matchingControls = elements.filter {
-            $0.kind != .other && $0.identifier == identifier
-        }
-        guard let visionPro = matchingControls.first,
-              visionPro.describesVisionPro
-        else {
-            return .visionProNotFound
-        }
-
-        let containsOnlyIdenticalAirPlayRows =
-            identifier.hasPrefix("screen-mirroring-device-AirPlay:")
-            && matchingControls.dropFirst().allSatisfy {
-                $0.kind == visionPro.kind
-                    && $0.text == visionPro.text
-                    && $0.isSelected == visionPro.isSelected
-            }
         guard matchingControls.count == 1
-            || containsOnlyIdenticalAirPlayRows
+            || containsOnlyAirPlayHeaders
         else {
             return .visionProNotFound
         }
@@ -234,26 +197,23 @@ public enum ControlCenterPlanner {
 public enum ControlCenterDisconnectPlanner {
     public static func action(
         for elements: [ControlCenterElement],
-        visionProName: String? = nil
+        visionProIdentifiers: Set<String> = []
     ) -> ControlCenterDisconnectAction {
         guard let identifier = ControlCenterPlanner.visionProIdentifier(
             in: elements,
-            named: visionProName ?? "Apple Vision Pro"
+            knownIdentifiers: visionProIdentifiers
         ) else {
             return .visionProNotFound
         }
 
-        let matchingCheckboxes = elements.filter {
-            $0.kind == .checkbox && $0.identifier == identifier
+        let matchingControls = elements.filter {
+            $0.kind != .other && $0.identifier == identifier
         }
-        let sidecarVisionProRows = matchingCheckboxes.filter(
-            \.describesVisionPro
-        )
         if identifier.hasPrefix("screen-mirroring-device-Sidecar:"),
-           let sidecarVisionPro = sidecarVisionProRows.first,
-           let isSelected = sidecarVisionPro.isSelected,
-           sidecarVisionProRows.count == 1,
-           matchingCheckboxes.count == sidecarVisionProRows.count
+           matchingControls.count == 1,
+           let sidecarVisionPro = matchingControls.first,
+           sidecarVisionPro.kind == .checkbox,
+           let isSelected = sidecarVisionPro.isSelected
         {
             return isSelected
                 ? .disconnectSidecar(
@@ -267,10 +227,21 @@ public enum ControlCenterDisconnectPlanner {
             return .visionProNotFound
         }
 
-        let devicePositions = elements.indices.filter {
+        let actionablePositions = elements.indices.filter {
             elements[$0].identifier == identifier
                 && elements[$0].kind != .other
-                && elements[$0].describesVisionPro
+        }
+        guard let firstPosition = actionablePositions.first else {
+            return .visionProNotFound
+        }
+        let firstRow = elements[firstPosition]
+        // Labels only distinguish duplicate headers from their mode rows;
+        // device identity was already established by the typed identifiers.
+        let devicePositions = actionablePositions.filter {
+            elements[$0].kind == .disclosure
+                || (elements[$0].kind == firstRow.kind
+                    && elements[$0].text.map(\.normalizedForMatching)
+                        == firstRow.text.map(\.normalizedForMatching))
         }
         let deviceRows = devicePositions.map { elements[$0] }
         guard let deviceRow = deviceRows.first,
@@ -409,12 +380,6 @@ public enum ControlCenterDisconnectPlanner {
 }
 
 private extension ControlCenterElement {
-    var describesVisionPro: Bool {
-        text.contains {
-            $0.normalizedForMatching.contains("vision pro")
-        }
-    }
-
     var describesMacVirtualDisplay: Bool {
         text.contains {
             $0.normalizedForMatching == "mac virtual display"

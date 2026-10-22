@@ -6,6 +6,52 @@ import Testing
 @Suite("Control Center retry timing")
 @MainActor
 struct ControlCenterRetryTests {
+    @Test("connection selects a typed headset with an arbitrary device name")
+    func connectsRenamedHeadset() async throws {
+        let script = ControlCenterScript(scans: [[
+            element(
+                index: 9,
+                kind: .checkbox,
+                identifier: "screen-mirroring-device-Sidecar:AVP",
+                text: ["avp"],
+                isSelected: false
+            ),
+        ]])
+
+        let didConnect = try await ControlCenter.connectMacVirtualDisplay(
+            visionProName: "Apple Vision Pro",
+            using: script.automation(maximumAttempts: 1)
+        )
+
+        #expect(didConnect)
+        #expect(script.presses == [.init(scanIndex: 0, elementIndex: 9)])
+    }
+
+    @Test("a convincing name cannot replace missing device-type evidence")
+    func refusesNameWithoutDeviceDiscovery() async {
+        let script = ControlCenterScript(
+            scans: [[element(
+                index: 9,
+                kind: .checkbox,
+                identifier: "screen-mirroring-device-Sidecar:AVP",
+                text: ["Apple Vision Pro"],
+                isSelected: false
+            )]],
+            visionProIdentifiers: []
+        )
+
+        do {
+            _ = try await ControlCenter.connectMacVirtualDisplay(
+                using: script.automation(maximumAttempts: 1)
+            )
+            Issue.record("Expected missing device-type evidence to prevent selection.")
+        } catch MacDisplayConnectError.visionProControlNotFound {
+            #expect(script.presses.isEmpty)
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
     @Test("device action uses only modes in the first duplicated group")
     func deviceActionUsesModesFromSelectedDuplicateGroup() {
         let targetID = "screen-mirroring-device-AirPlay:AVP"
@@ -14,7 +60,7 @@ struct ControlCenterRetryTests {
                 index: 9,
                 kind: .disclosure,
                 identifier: targetID,
-                text: ["S’s Apple Vision Pro"],
+                text: ["avp"],
                 isSelected: true
             ),
             element(
@@ -40,7 +86,7 @@ struct ControlCenterRetryTests {
                 index: 13,
                 kind: .disclosure,
                 identifier: targetID,
-                text: ["S’s Apple Vision Pro"],
+                text: ["avp"],
                 isSelected: true
             ),
             element(
@@ -62,8 +108,16 @@ struct ControlCenterRetryTests {
         #expect(
             ControlCenterDeviceActionValidation.modeElementPositions(
                 in: elements,
-                deviceElementIndex: 9
+                deviceElementIndex: 9,
+                visionProIdentifiers: [targetID]
             ) == [1, 3]
+        )
+        #expect(
+            ControlCenterDeviceActionValidation.modeElementPositions(
+                in: elements,
+                deviceElementIndex: 9,
+                visionProIdentifiers: []
+            ) == nil
         )
     }
 
@@ -97,7 +151,8 @@ struct ControlCenterRetryTests {
         #expect(
             ControlCenterDeviceActionValidation.modeElementPositions(
                 in: elements,
-                deviceElementIndex: 9
+                deviceElementIndex: 9,
+                visionProIdentifiers: [targetID]
             ) == nil
         )
     }
@@ -139,7 +194,8 @@ struct ControlCenterRetryTests {
         #expect(
             ControlCenterDeviceActionValidation.modeElementPositions(
                 in: elements,
-                deviceElementIndex: 90
+                deviceElementIndex: 90,
+                visionProIdentifiers: [targetID]
             ) == [1]
         )
     }
@@ -818,6 +874,7 @@ struct ControlCenterRetryTests {
 @MainActor
 private final class ControlCenterScript {
     private let scans: [[ControlCenterElement]]
+    private let visionProIdentifiers: Set<String>
     private let windowElementIndices: [Set<Int>]
     private var nextScanIndex = 0
 
@@ -832,9 +889,14 @@ private final class ControlCenterScript {
 
     init(
         scans: [[ControlCenterElement]],
-        windowElementIndices: [[Int]] = []
+        windowElementIndices: [[Int]] = [],
+        visionProIdentifiers: Set<String> = [
+            "screen-mirroring-device-Sidecar:AVP",
+            "screen-mirroring-device-AirPlay:AVP",
+        ]
     ) {
         self.scans = scans
+        self.visionProIdentifiers = visionProIdentifiers
         self.windowElementIndices = windowElementIndices.map(Set.init)
     }
 
@@ -868,6 +930,7 @@ private final class ControlCenterScript {
 
         return ControlCenterScan(
             snapshots: snapshots,
+            visionProIdentifiers: visionProIdentifiers,
             isWindow: { windows.contains($0) },
             press: { [self] index in
                 presses.append(

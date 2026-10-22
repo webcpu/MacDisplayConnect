@@ -116,8 +116,7 @@ enum ControlCenter {
         visionProName: String? = nil
     ) async throws -> Bool {
         DiagnosticLog.record(
-            "Selecting Mac Virtual Display; target="
-                + (visionProName ?? "automatic")
+            "Selecting Mac Virtual Display; target=device type"
         )
         let applications = try controlCenterApplications()
         return try await connectMacVirtualDisplay(
@@ -127,7 +126,7 @@ enum ControlCenter {
     }
 
     static func connectMacVirtualDisplay(
-        visionProName: String? = nil,
+        visionProName _: String? = nil,
         using automation: ControlCenterAutomation
     ) async throws -> Bool {
         let maximumAttempts = automation.connectionReadinessAttempts
@@ -140,7 +139,7 @@ enum ControlCenter {
             let scan = try automation.scan()
             let action = ControlCenterPlanner.action(
                 for: scan.snapshots,
-                visionProName: visionProName
+                visionProIdentifiers: scan.visionProIdentifiers
             )
             DiagnosticLog.record(
                 "Vision Pro scan \(attempt): "
@@ -239,8 +238,7 @@ enum ControlCenter {
         visionProName: String? = nil
     ) async throws -> Bool {
         DiagnosticLog.record(
-            "Deselecting Mac Virtual Display; target="
-                + (visionProName ?? "automatic")
+            "Deselecting Mac Virtual Display; target=device type"
         )
         let applications = try controlCenterApplications()
         return try await disconnectMacVirtualDisplay(
@@ -250,7 +248,7 @@ enum ControlCenter {
     }
 
     static func disconnectMacVirtualDisplay(
-        visionProName: String? = nil,
+        visionProName _: String? = nil,
         using automation: ControlCenterAutomation
     ) async throws -> Bool {
         guard automation.maximumAttempts > 0 else {
@@ -261,7 +259,7 @@ enum ControlCenter {
             let scan = try automation.scan()
             let action = ControlCenterDisconnectPlanner.action(
                 for: scan.snapshots,
-                visionProName: visionProName
+                visionProIdentifiers: scan.visionProIdentifiers
             )
             DiagnosticLog.record(
                 "Vision Pro disconnect scan \(attempt): "
@@ -394,6 +392,8 @@ enum ControlCenter {
                 })
                 return ControlCenterScan(
                     snapshots: elements.snapshots,
+                    visionProIdentifiers:
+                        VisionProDeviceDiscovery.controlCenterIdentifiers(),
                     isWindow: { index in
                         elements.indices.contains(index)
                             && elements[index].role == kAXWindowRole
@@ -525,14 +525,14 @@ enum ControlCenter {
             throw MacDisplayConnectError.visionProControlNotFound
         }
 
+        let visionProIdentifiers =
+            VisionProDeviceDiscovery.controlCenterIdentifiers()
         let deviceRow = elements[index]
         guard deviceRow.role == kAXDisclosureTriangleRole,
               deviceRow.selectedValue == true,
               let identifier = deviceRow.identifier,
               identifier.hasPrefix("screen-mirroring-device-AirPlay:"),
-              deviceRow.searchableText.contains(where: {
-                  $0.normalizedForDiagnostics.contains("vision pro")
-              }),
+              visionProIdentifiers.contains(identifier),
               let deviceFrame = deviceRow.frame,
               deviceFrame.width > 0,
               deviceFrame.height > 0
@@ -545,17 +545,15 @@ enum ControlCenter {
 
         let refreshedSnapshots = elements.snapshots
         guard refreshedSnapshots.indices.contains(index),
-              let visionProName = refreshedSnapshots[index].text.first(where: {
-                  $0.normalizedForDiagnostics.contains("vision pro")
-              }),
               ControlCenterDisconnectPlanner.action(
                   for: refreshedSnapshots,
-                  visionProName: visionProName
+                  visionProIdentifiers: visionProIdentifiers
               ) == .disconnectAirPlayDevice(elementIndex: index),
               let modeElementPositions =
                   ControlCenterDeviceActionValidation.modeElementPositions(
                       in: refreshedSnapshots,
-                      deviceElementIndex: index
+                      deviceElementIndex: index,
+                      visionProIdentifiers: visionProIdentifiers
                   ),
               modeElementPositions.allSatisfy(elements.indices.contains)
         else {
@@ -674,7 +672,8 @@ enum ControlCenter {
 enum ControlCenterDeviceActionValidation {
     static func modeElementPositions(
         in elements: [ControlCenterElement],
-        deviceElementIndex: Int
+        deviceElementIndex: Int,
+        visionProIdentifiers: Set<String>
     ) -> [Int]? {
         let matchingDevicePositions = elements.indices.filter {
             elements[$0].index == deviceElementIndex
@@ -690,9 +689,7 @@ enum ControlCenterDeviceActionValidation {
               deviceRow.isSelected == true,
               let identifier = deviceRow.identifier,
               identifier.hasPrefix("screen-mirroring-device-AirPlay:"),
-              deviceRow.text.contains(where: {
-                  $0.normalizedForDiagnostics.contains("vision pro")
-              })
+              visionProIdentifiers.contains(identifier)
         else {
             return nil
         }
@@ -712,9 +709,6 @@ enum ControlCenterDeviceActionValidation {
                 return true
             }
             return elements[position].kind == .disclosure
-                || elements[position].text.contains {
-                    $0.normalizedForDiagnostics.contains("vision pro")
-                }
         }
         let groupEnd = nextDevicePosition ?? elements.endIndex
         let modePositions = elements.indices.filter {
@@ -808,6 +802,7 @@ struct ControlCenterAutomation {
 @MainActor
 struct ControlCenterScan {
     let snapshots: [ControlCenterElement]
+    let visionProIdentifiers: Set<String>
     let isWindow: (Int) -> Bool
     let press: (Int) throws -> Void
     let dismissControlCenter: () throws -> Void

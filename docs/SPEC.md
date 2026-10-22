@@ -22,8 +22,7 @@ swift test
 swift build
 ./scripts/build-app.sh
 open ".build/products/Mac Display Connect.app"
-./scripts/system-test.sh --cycles 20 \
-  --vision-pro-name "S’s Apple Vision Pro"
+./scripts/system-test.sh --cycles 20
 xcodebuild test -workspace MacDisplayConnect.xcworkspace \
   -scheme MacDisplayConnectVision \
   -destination "platform=visionOS Simulator,name=Apple Vision Pro"
@@ -61,7 +60,10 @@ decisions without invoking macOS UI. Test transport through a real loopback TCP
 connection. Build and launch the companion on the Vision Pro simulator. The
 final Mac Virtual Display connection requires an unlocked physical Vision Pro.
 The opt-in system-test launcher exercises repeated connect/disconnect cycles on
-that physical device and writes a per-run report.
+that physical device and writes a per-run report. Selection requires exactly one
+known device identifier among the actionable Screen Mirroring controls, without
+using device names. The obsolete `--vision-pro-name` flag is rejected rather than
+silently targeting a different headset.
 
 ## Boundaries
 
@@ -83,5 +85,10 @@ that physical device and writes a per-run report.
 
 macOS requires Accessibility permission to operate Screen Mirroring. The app
 prompts for it once and never automates unrelated applications. The companion
-uses one bounded, versioned command on the local network; internet access and
-private display APIs are not used.
+uses one bounded, versioned command on the local network; internet access is not
+used. The Mac uses Apple's private SidecarCore framework for read-only device-type
+and identifier discovery, matching current Sidecar and AirPlay identifiers to
+Screen Mirroring. Connection and disconnection remain Accessibility operations.
+Missing or ambiguous matches and unavailable discovery fail closed, with no
+device-name fallback. The lookup has been verified on macOS 27; macOS 26 runtime
+compatibility remains unverified, and private interfaces may change.

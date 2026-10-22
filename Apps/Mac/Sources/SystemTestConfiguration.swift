@@ -6,12 +6,16 @@ struct SystemTestConfiguration: Equatable, Sendable {
     let reportURL: URL
 
     static func parse(arguments: [String]) throws -> Self? {
+        guard !arguments.contains(where: {
+            $0 == "--vision-pro-name" || $0.hasPrefix("--vision-pro-name=")
+        }) else {
+            throw SystemTestConfigurationError.invalidArguments(
+                "--vision-pro-name is no longer supported. Omit it; "
+                    + "the test requires one unambiguous Apple Vision Pro."
+            )
+        }
         let cycleValues = try values(
             for: "--system-test-cycles",
-            in: arguments
-        )
-        let visionProValues = try values(
-            for: "--vision-pro-name",
             in: arguments
         )
         let reportValues = try values(
@@ -20,10 +24,9 @@ struct SystemTestConfiguration: Equatable, Sendable {
         )
 
         guard !cycleValues.isEmpty else {
-            guard visionProValues.isEmpty, reportValues.isEmpty else {
+            guard reportValues.isEmpty else {
                 throw SystemTestConfigurationError.invalidArguments(
-                    "--vision-pro-name and --system-test-report require "
-                        + "--system-test-cycles."
+                    "--system-test-report requires --system-test-cycles."
                 )
             }
             return nil
@@ -36,13 +39,6 @@ struct SystemTestConfiguration: Equatable, Sendable {
                 "--system-test-cycles requires one positive integer."
             )
         }
-        guard visionProValues.count <= 1,
-              visionProValues.first.map({ !$0.isEmpty }) ?? true
-        else {
-            throw SystemTestConfigurationError.invalidArguments(
-                "--vision-pro-name accepts one nonempty value."
-            )
-        }
         guard reportValues.count <= 1,
               reportValues.first.map({ !$0.isEmpty }) ?? true
         else {
@@ -53,7 +49,7 @@ struct SystemTestConfiguration: Equatable, Sendable {
 
         return Self(
             cycleCount: cycleCount,
-            visionProName: visionProValues.first,
+            visionProName: nil,
             reportURL: reportValues.first
                 .map { URL(fileURLWithPath: $0) }
                 ?? defaultReportURL()

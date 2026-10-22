@@ -14,21 +14,41 @@ struct SystemTestRunnerTests {
         )
     }
 
-    @Test("launch arguments parse cycles, device name, and report path")
+    @Test("launch arguments parse cycles and report path without a device name")
     func parsesSystemTestArguments() throws {
         let parsed = try SystemTestConfiguration.parse(
             arguments: [
                 "/Applications/MacDisplayConnect",
                 "--system-test-cycles", "20",
-                "--vision-pro-name", "S’s Apple Vision Pro",
                 "--system-test-report", "/tmp/report.json",
             ]
         )
         let configuration = try #require(parsed)
 
         #expect(configuration.cycleCount == 20)
-        #expect(configuration.visionProName == "S’s Apple Vision Pro")
+        #expect(configuration.visionProName == nil)
         #expect(configuration.reportURL.path == "/tmp/report.json")
+    }
+
+    @Test(
+        "obsolete device-name selectors are rejected instead of ignored",
+        arguments: [
+            [
+                "app", "--system-test-cycles", "1",
+                "--vision-pro-name", "S’s Apple Vision Pro",
+            ],
+            [
+                "app", "--system-test-cycles", "1",
+                "--vision-pro-name=S’s Apple Vision Pro",
+            ],
+            ["app", "--vision-pro-name", "S’s Apple Vision Pro"],
+            ["app", "--vision-pro-name=S’s Apple Vision Pro"],
+        ]
+    )
+    func rejectsObsoleteVisionProNameArguments(_ arguments: [String]) {
+        #expect(throws: SystemTestConfigurationError.self) {
+            try SystemTestConfiguration.parse(arguments: arguments)
+        }
     }
 
     @Test(

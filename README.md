@@ -36,6 +36,8 @@ Make sure that:
   directory.
 
 The Mac app targets macOS 26. The included Xcode project targets visionOS 26.
+Name-independent device discovery has been verified on macOS 27; its runtime
+compatibility with macOS 26 has not yet been verified.
 
 To share the pointer between macOS and visionOS apps, turn on Handoff on both
 devices. See [Apple’s Mac Virtual Display requirements][apple-requirements] for
@@ -160,15 +162,19 @@ The log is stored at
 
 Mac Display Connect communicates only on your local network. The Apple Vision
 Pro app can request two fixed actions: connect and check connection status.
-Connect requests include the device name reported by visionOS so the Mac can
-choose the matching Apple Vision Pro in Screen Mirroring.
+The Mac identifies Apple Vision Pro by device type, not its name. It uses Apple's
+private SidecarCore framework only to read device types and their current Sidecar
+and AirPlay identifiers. Selection requires exactly one known identifier among
+the actionable Screen Mirroring controls; missing or ambiguous matches are not
+selected. Connecting and disconnecting still use Control Center Accessibility.
+Private interfaces may change with macOS updates; unavailable discovery does not
+fall back to device names.
 
 Mac Display Connect doesn’t:
 
 - Send data over the internet.
 - Install a display driver.
 - Replace Apple’s Mac Virtual Display protocol.
-- Use private display APIs.
 - Control unrelated applications.
 
 ## For developers
@@ -196,8 +202,7 @@ The system test repeatedly connects and disconnects a physical Apple Vision Pro
 through macOS Control Center:
 
 ```sh
-./scripts/system-test.sh --cycles 20 \
-  --vision-pro-name "S’s Apple Vision Pro"
+./scripts/system-test.sh --cycles 20
 ```
 
 Before starting, quit **Mac Display Connect** and keep Apple Vision Pro worn,
@@ -206,6 +211,10 @@ already enabled for the signed Mac app bundle. The system-test script rebuilds
 that app and refuses to start while another copy is running. System-test mode is
 explicit: if Mac Virtual Display is already connected, its preflight disconnects
 it before the counted cycles begin.
+
+The test uses the same name-independent selection and requires one unambiguous
+known device identifier in Screen Mirroring. The obsolete `--vision-pro-name`
+option is rejected, not ignored; it cannot restrict the test to a named headset.
 
 Every cycle confirms the disconnected state, connects, verifies a stable
 connection, keeps it connected for five seconds, disconnects, and verifies a
